@@ -60,8 +60,34 @@ def progress_bar(chat_id, message_id):
 
 
 # =======================================================
-# 2. CÁC HÀM BÓC TÁCH LINK TIKTOK (5 MÁY CHỦ XOAY TUA)
+# 2. CÁC HÀM BÓC TÁCH LINK TIKTOK (MÁY CHỦ XOAY TUA NÂNG CẤP)
 # =======================================================
+
+def call_api_tikwm_direct(tiktok_url):
+    """Máy chủ Siêu Cấp: TikWM Direct (Miễn phí, tốc độ cao, hỗ trợ HD không logo 2024-2026)"""
+    url = "https://www.tikwm.com/api/"
+    params = {"url": tiktok_url, "hd": 1}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=12)
+        if response.status_code == 200:
+            res_json = response.json()
+            if res_json.get("code") == 0:
+                data = res_json.get("data", {})
+                # Ưu tiên link hdplay, nếu không có lấy play (không logo)
+                play_url = data.get("hdplay") or data.get("play")
+                if play_url:
+                    if not play_url.startswith("http"):
+                        play_url = "https://www.tikwm.com" + play_url
+                    caption = data.get("title") or "Video tải từ TikWM Siêu Tốc ⚡"
+                    print("[+] TikWM bóc link HD thành công!")
+                    return play_url, caption
+    except Exception as e:
+        print(f"[-] TikWM gặp sự cố: {e}")
+    return None, None
+
 
 def call_api_1_scrapper(tiktok_url):
     """Máy chủ 1: TikTok Scrapper (Yêu cầu trích xuất ID)"""
@@ -579,11 +605,12 @@ def process_download_request(message, raw_url, platform):
     # Phân nhóm máy chủ theo nền tảng
     if platform == 'tiktok':
         api_servers = [
-            {"name": "TikTok 1 (Scrapper)", "func": call_api_1_scrapper},
-            {"name": "TikTok 2 (Social Media)", "func": call_api_2_social_media},
-            {"name": "TikTok 3 (API23)", "func": call_api_3_tiktok_api23},
-            {"name": "TikTok 4 (No Watermark HD)", "func": call_api_4_no_watermark2},
-            {"name": "TikTok 5 (7scorp)", "func": call_api_5_7scorp}
+            {"name": "TikTok VIP 1 (TikWM HD Direct)", "func": call_api_tikwm_direct},
+            {"name": "TikTok 2 (No Watermark HD)", "func": call_api_4_no_watermark2},
+            {"name": "TikTok 3 (Social Media)", "func": call_api_2_social_media},
+            {"name": "TikTok 4 (Scrapper)", "func": call_api_1_scrapper},
+            {"name": "TikTok 5 (API23)", "func": call_api_3_tiktok_api23},
+            {"name": "TikTok 6 (7scorp)", "func": call_api_5_7scorp}
         ]
     elif platform == 'facebook':
         api_servers = [
