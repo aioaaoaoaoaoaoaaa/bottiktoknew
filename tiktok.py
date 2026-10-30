@@ -646,19 +646,22 @@ pending_shorten_links = {}
 
 
 def format_user_identity(user=None, user_name=None, user_id=None, username=None):
-    """Định dạng chuỗi hiển thị: [Tên người gửi] - @username (hoặc None) / [ID tele]"""
+    """Định dạng chuỗi hiển thị: Tên ( username/None - id tele )"""
     if user:
         name = (user.first_name if user.first_name else None) or "Người dùng"
         if user.last_name:
             name += f" {user.last_name}"
-        uname = f"@{user.username}" if user.username else "None"
+        uname = f"@{user.username.lstrip('@')}" if user.username else "None"
         uid = str(user.id)
-        return f"{name} - {uname} / {uid}"
+        return f"{name} ({uname} - {uid})"
     else:
         name = user_name or "Người dùng"
-        uname = f"@{username}" if (username and username != "None") else "None"
+        if username and username != "None":
+            uname = f"@{username.lstrip('@')}"
+        else:
+            uname = "None"
         uid = str(user_id) if user_id else "None"
-        return f"{name} - {uname} / {uid}"
+        return f"{name} ({uname} - {uid})"
 
 def cleanup_pending_links():
     """Dọn dẹp các link tạm quá 1 tiếng để tránh chiếm bộ nhớ"""
