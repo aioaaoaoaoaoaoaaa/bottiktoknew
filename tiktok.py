@@ -713,21 +713,17 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
 
     # Bàn phím Inline gồm 2 nút: win và app
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    btn_win = telebot.types.InlineKeyboardButton("🌐 Link999 (.win)", callback_data=f"shorten:win:{link_id}")
-    btn_app = telebot.types.InlineKeyboardButton("🌐 Link999 (.app)", callback_data=f"shorten:app:{link_id}")
+    btn_win = telebot.types.InlineKeyboardButton("Link999 (.win)", callback_data=f"shorten:win:{link_id}")
+    btn_app = telebot.types.InlineKeyboardButton("Link999 (.app)", callback_data=f"shorten:app:{link_id}")
     markup.add(btn_win, btn_app)
-
-    display_url = target_url
-    if len(display_url) > 45:
-        display_url = display_url[:42] + "..."
 
     user_identity = format_user_identity(user=user, user_name=user_name, user_id=user_id, username=username)
 
     msg_text = (
         f"{prefix_text}"
-        f"🔗 <b>Link:</b> <code>{display_url}</code>\n"
-        f"👤 <b>Yêu cầu bởi:</b> {user_identity}\n\n"
-        f"❓ <b>Bạn muốn rút gọn link với đuôi nào?</b>"
+        f"🔗 {target_url}\n"
+        f"👤 : {user_identity}\n\n"
+        f"❓ <b>Bạn chọn host nào</b>"
     )
     bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML")
 
