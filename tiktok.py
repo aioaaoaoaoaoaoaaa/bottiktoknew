@@ -796,6 +796,7 @@ def extract_media_url(text):
 # HỆ THỐNG TRÒ CHUYỆN AI (GROQ CLOUD - QWEN / LLAMA 3)
 # =======================================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def search_realtime_web(query, max_items=4):
     """
@@ -868,11 +869,67 @@ def get_vietnam_time_str():
     day_name = weekdays[int(now.strftime("%w"))]
     return f"{day_name}, ngày {now.day} tháng {now.month} năm {now.year}, bây giờ là {now.strftime('%H:%M')} (theo giờ Việt Nam)"
 
+def call_gemini_ai(user_query, sys_content, history=None):
+    """
+    Gọi Google Gemini API (Ưu tiên số 1): gemini-3.5-flash, gemini-3.1-flash-lite, gemini-3-flash-preview
+    """
+    if not GEMINI_API_KEY:
+        return None
+        
+    models_to_try = [
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3-flash-preview"
+    ]
+    
+    contents = []
+    if history:
+        for h in history:
+            role = "user" if h.get("role") == "user" else "model"
+            contents.append({
+                "role": role,
+                "parts": [{"text": h.get("content", "")}]
+            })
+            
+    contents.append({
+        "role": "user",
+        "parts": [{"text": user_query}]
+    })
+    
+    payload = {
+        "contents": contents,
+        "systemInstruction": {
+            "parts": [{"text": sys_content}]
+        },
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1500
+        }
+    }
+    
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            res = requests.post(url, json=payload, timeout=12)
+            if res.status_code == 200:
+                data = res.json()
+                candidate = data.get("candidates", [{}])[0]
+                text = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
+                if text and text.strip():
+                    return text.strip()
+            else:
+                print(f"⚠️ Gemini model {model_name} trả về mã {res.status_code} -> Thử model tiếp theo...")
+        except Exception as e:
+            print(f"⚠️ Gemini model {model_name} ngoại lệ: {e}")
+            continue
+            
+    return None
+
 def call_groq_ai(user_query, history=None, user_name="bạn"):
     """
     Gọi API Groq để trả lời câu hỏi của người dùng với nhân vật AI Tày
     """
-    if not GROQ_API_KEY:
+    if not GROQ_API_KEY and not GEMINI_API_KEY:
         return "⚠️ AI đã ngủ"
         
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -916,12 +973,20 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         
     messages.append({"role": "user", "content": user_query})
     
-    # Danh sách các mô hình hỏi đáp ưu tiên trên Groq (tự động luân chuyển dự phòng nếu một model lỗi)
+    # 1. ƯU TIÊN SỐ 1: GỌI GOOGLE GEMINI TRƯỚC
+    gemini_answer = call_gemini_ai(user_query, sys_content, history)
+    if gemini_answer:
+        return clean_ai_response(gemini_answer)
+
+    # 2. DỰ PHÒNG: NẾU GEMINI LỖI/HẾT LƯỢT THÌ TỰ ĐỘNG CHUYỂN SANG GROQ
+    if not GROQ_API_KEY:
+        return "⚠️ AI đã ngủ"
+
     models_to_try = [
-        "qwen/qwen3.8-27b",      # Ưu tiên 1: Thông minh nhất, tiếng Việt tự nhiên nhất (1.000 lượt/ngày)
-        "openai/gpt-oss-120b",   # Dự phòng 1: Mô hình lớn 120B cực mạnh (1.000 lượt/ngày)
-        "openai/gpt-oss-20b",    # Dự phòng 2: Mô hình 20B nhanh nhẹn (1.000 lượt/ngày)
-        "allam-2-7b"             # Dự phòng 3: Hạn mức siêu khủng (7.000 lượt/ngày)
+        "qwen/qwen3.8-27b",      # Ưu tiên Groq 1: Tiếng Việt mượt mà (1.000 lượt/ngày)
+        "openai/gpt-oss-120b",   # Dự phòng Groq 2: Mô hình lớn 120B cực mạnh (1.000 lượt/ngày)
+        "openai/gpt-oss-20b",    # Dự phòng Groq 3: Mô hình 20B nhanh nhẹn (1.000 lượt/ngày)
+        "allam-2-7b"             # Dự phòng Groq 4: Hạn mức siêu khủng (7.000 lượt/ngày)
     ]
     
     for model_name in models_to_try:
