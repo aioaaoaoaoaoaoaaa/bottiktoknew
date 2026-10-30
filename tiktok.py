@@ -799,7 +799,7 @@ def call_groq_ai(user_query, history=None):
     Gọi API Groq để trả lời câu hỏi của người dùng (hạn mức siêu lớn 14.400 req/ngày, tốc độ < 1s)
     """
     if not GROQ_API_KEY:
-        return "⚠️ Hệ thống AI chưa được cấu hình GROQ_API_KEY. Vui lòng liên hệ Admin!"
+        return "⚠️ AI đã ngủ"
         
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
