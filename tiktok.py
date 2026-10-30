@@ -644,6 +644,22 @@ def call_yt_api_shorts_downloader_v3(yt_url):
 LINK999_API_TOKEN = os.getenv("LINK999_API_TOKEN", "c4aa527702c6a8fe6cb1d1427bfbb10dbebfddc2")
 pending_shorten_links = {}
 
+
+def format_user_identity(user=None, user_name=None, user_id=None, username=None):
+    """Định dạng chuỗi hiển thị: [Tên người gửi] - @username (hoặc None) / [ID tele]"""
+    if user:
+        name = (user.first_name if user.first_name else None) or "Người dùng"
+        if user.last_name:
+            name += f" {user.last_name}"
+        uname = f"@{user.username}" if user.username else "None"
+        uid = str(user.id)
+        return f"{name} - {uname} / {uid}"
+    else:
+        name = user_name or "Người dùng"
+        uname = f"@{username}" if (username and username != "None") else "None"
+        uid = str(user_id) if user_id else "None"
+        return f"{name} - {uname} / {uid}"
+
 def cleanup_pending_links():
     """Dọn dẹp các link tạm quá 1 tiếng để tránh chiếm bộ nhớ"""
     now = time.time()
@@ -673,7 +689,7 @@ def call_shorten_link999(long_url, domain="app"):
     except Exception as e:
         return None, str(e)
 
-def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_message_id=None, prefix_text=""):
+def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_message_id=None, prefix_text="", username=None, user=None):
     """
     Hiển thị thông báo hỏi người dùng muốn rút gọn với đuôi win hay app
     """
@@ -691,6 +707,7 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
         "url": target_url,
         "user_id": user_id,
         "user_name": user_name,
+        "username": username,
         "created_at": time.time()
     }
 
@@ -704,10 +721,12 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
     if len(display_url) > 45:
         display_url = display_url[:42] + "..."
 
+    user_identity = format_user_identity(user=user, user_name=user_name, user_id=user_id, username=username)
+
     msg_text = (
         f"{prefix_text}"
         f"🔗 <b>Link:</b> <code>{display_url}</code>\n"
-        f"👤 <b>Yêu cầu bởi:</b> {user_name}\n\n"
+        f"👤 <b>Yêu cầu bởi:</b> {user_identity}\n\n"
         f"❓ <b>Bạn muốn rút gọn link với đuôi nào?</b>"
     )
     bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML")
@@ -978,12 +997,15 @@ def process_download_request(message, raw_url, platform):
             pass
             
         # Tự động chuyển sang chức năng rút gọn link khi không tải được video
+        username = message.from_user.username if (message.from_user and message.from_user.username) else "None"
         prompt_shorten_link(
             chat_id=message.chat.id,
             user_id=user_id,
             user_name=user_name,
             target_url=raw_url,
-            prefix_text="⚠️ <b>Không thể tải trực tiếp video từ link này.</b>\n👉 <i>Tự động chuyển sang chức năng rút gọn link:</i>\n\n"
+            prefix_text="⚠️ <b>Không thể tải trực tiếp video từ link này.</b>\n👉 <i>Tự động chuyển sang chức năng rút gọn link:</i>\n\n",
+            username=username,
+            user=message.from_user
         )
 
 
@@ -1013,12 +1035,15 @@ def handle_general_url_message(message):
                 pass
             return
 
+        username = message.from_user.username if (message.from_user and message.from_user.username) else "None"
         prompt_shorten_link(
             chat_id=message.chat.id,
             user_id=user_id,
             user_name=user_name,
             target_url=gen_url,
-            original_message_id=message.message_id
+            original_message_id=message.message_id,
+            username=username,
+            user=message.from_user
         )
 
 
@@ -1052,11 +1077,14 @@ def handle_shorten_command(message):
         
     user_id = message.from_user.id if message.from_user else None
     user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
+    username = message.from_user.username if (message.from_user and message.from_user.username) else "None"
     prompt_shorten_link(
         chat_id=message.chat.id,
         user_id=user_id,
         user_name=user_name,
-        target_url=gen_url
+        target_url=gen_url,
+        username=username,
+        user=message.from_user
     )
 
 
@@ -1128,7 +1156,7 @@ def handle_shorten_callback(call):
             f"🌐 <b>Tên miền:</b> <code>link999.{domain_choice}</code>\n\n"
             f"👉 <b>Link rút gọn:</b>\n"
             f"<code>{shortened_url}</code>\n\n"
-            f"👤 <i>Thực hiện bởi: {clicker_name}</i>"
+            f"👤 <i>Thực hiện bởi: {format_user_identity(user=call.from_user)}</i>"
         )
         bot.edit_message_text(
             result_text,
