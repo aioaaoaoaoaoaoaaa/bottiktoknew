@@ -671,7 +671,7 @@ def process_download_request(message, raw_url, platform):
 
     if video_link:
         try:
-            bot.edit_message_text(f"✅ Đã tải xong video cho {user_name}! Đang gửi...", chat_id=message.chat.id, message_id=status_msg.message_id)
+            bot.edit_message_text("Đợi xíu video sẽ hiện sau ít giây", chat_id=message.chat.id, message_id=status_msg.message_id)
             
             # Gửi video dưới dạng reply lại tin nhắn người gửi trong nhóm
             bot.send_video(
