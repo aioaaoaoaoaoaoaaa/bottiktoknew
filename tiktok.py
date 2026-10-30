@@ -794,9 +794,9 @@ def extract_media_url(text):
 # =======================================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-def call_groq_ai(user_query, history=None):
+def call_groq_ai(user_query, history=None, user_name="bạn"):
     """
-    Gọi API Groq để trả lời câu hỏi của người dùng (hạn mức siêu lớn 14.400 req/ngày, tốc độ < 1s)
+    Gọi API Groq để trả lời câu hỏi của người dùng với nhân vật AI Tày
     """
     if not GROQ_API_KEY:
         return "⚠️ AI đã ngủ"
@@ -807,14 +807,18 @@ def call_groq_ai(user_query, history=None):
         "Content-Type": "application/json"
     }
     
+    sys_content = (
+        "Tên của bạn là Tày - một trợ lý AI thông minh, vui vẻ và thân thiện trên Telegram. "
+        "Khi trò chuyện hoặc trả lời người dùng, bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày thấy...', 'Tày giúp bạn nhé', 'Tày là...') "
+        "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ". "
+        "Trả lời bằng tiếng Việt tự nhiên, dí dỏm, hữu ích, súc tích, định dạng rõ ràng (sử dụng in đậm, danh sách gạch đầu dòng, emoji phù hợp). "
+        "Không trả lời quá dài dòng trừ khi người dùng yêu cầu chi tiết."
+    )
+    
     messages = [
         {
             "role": "system",
-            "content": (
-                "Bạn là trợ lý AI thông minh trên Telegram, hỗ trợ trả lời bằng tiếng Việt tự nhiên, thân thiện, "
-                "súc tích, có cấu trúc rõ ràng (sử dụng in đậm, danh sách gạch đầu dòng, emoji phù hợp). "
-                "Không trả lời quá dài dòng trừ khi người dùng yêu cầu chi tiết."
-            )
+            "content": sys_content
         }
     ]
     
@@ -865,9 +869,9 @@ def send_welcome(message):
         "✨ <b>Các tính năng chính:</b>\n"
         "1️⃣ <b>Tải Video HD:</b> Dán link TikTok, Facebook, YouTube để tải video không logo.\n"
         "2️⃣ <b>Rút gọn Link:</b> Gửi bất kỳ link web nào để rút gọn nhanh qua <b>Link999</b> (.win / .app).\n"
-        "3️⃣ <b>Chat với AI:</b> Chỉ cần gõ dấu chấm <code>.</code> ở đầu câu hỏi!\n"
-        "   👉 <i>Ví dụ:</i> <code>.thời tiết hôm nay thế nào</code> hoặc <code>.viết caption tiktok hài hước</code>\n\n"
-        "💬 <i>Trong tin nhắn riêng tư với Bot, bạn có thể trò chuyện trực tiếp như ChatGPT!</i>"
+        "3️⃣ <b>Chat với AI Tày:</b> Chỉ cần gõ dấu chấm <code>.</code> ở đầu câu hỏi!\n"
+        "   👉 <i>Ví dụ:</i> <code>.Tày ơi thời tiết hôm nay thế nào</code> hoặc <code>.viết caption tiktok hài hước</code>\n\n"
+        "💬 <i>Trong tin nhắn riêng tư với Bot, bạn có thể trò chuyện trực tiếp với Tày như bạn bè!</i>"
     )
     bot.reply_to(message, help_text, parse_mode="HTML")
 
@@ -1315,7 +1319,7 @@ def handle_ai_chat_message(message):
         })
 
     # Gọi AI Groq
-    reply_text = call_groq_ai(query, history=history if history else None)
+    reply_text = call_groq_ai(query, history=history if history else None, user_name=user_name)
 
     # Chia nhỏ nếu vượt quá giới hạn 4000 ký tự của Telegram
     max_len = 4000
