@@ -1145,18 +1145,14 @@ def handle_shorten_callback(call):
         markup = telebot.types.InlineKeyboardMarkup()
         markup.add(telebot.types.InlineKeyboardButton("🚀 Mở Link Rút Gọn", url=shortened_url))
         
-        display_orig = target_url
-        if len(display_orig) > 50:
-            display_orig = display_orig[:47] + "..."
-
+        creator_info = format_user_identity(user=call.from_user)
         result_text = (
-            f"✅ <b>RÚT GỌN LINK THÀNH CÔNG!</b>\n"
+            f"✅<b>Success</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔗 <b>Link gốc:</b> <code>{display_orig}</code>\n"
-            f"🌐 <b>Tên miền:</b> <code>link999.{domain_choice}</code>\n\n"
-            f"👉 <b>Link rút gọn:</b>\n"
-            f"<code>{shortened_url}</code>\n\n"
-            f"👤 <i>Thực hiện bởi: {format_user_identity(user=call.from_user)}</i>"
+            f"🔗 <b>Link gốc:</b> {target_url}\n"
+            f"🌐 <b>Host:</b> link999.{domain_choice}\n"
+            f"👉 <b>Link rút gọn:</b> <code>{shortened_url}</code>\n\n"
+            f"👤 <b>Creator:</b> {creator_info}"
         )
         bot.edit_message_text(
             result_text,
