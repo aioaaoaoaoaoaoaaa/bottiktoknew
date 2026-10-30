@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import uuid
+import base64
 
 # Cấu hình UTF-8 cho console Windows
 if sys.platform == 'win32':
@@ -789,18 +790,76 @@ def extract_media_url(text):
 
 
 # =======================================================
+# HỆ THỐNG TRÒ CHUYỆN AI (GROQ CLOUD - QWEN / LLAMA 3)
+# =======================================================
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+def call_groq_ai(user_query, history=None):
+    """
+    Gọi API Groq để trả lời câu hỏi của người dùng (hạn mức siêu lớn 14.400 req/ngày, tốc độ < 1s)
+    """
+    if not GROQ_API_KEY:
+        return "⚠️ Hệ thống AI chưa được cấu hình GROQ_API_KEY. Vui lòng liên hệ Admin!"
+        
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Bạn là trợ lý AI thông minh trên Telegram, hỗ trợ trả lời bằng tiếng Việt tự nhiên, thân thiện, "
+                "súc tích, có cấu trúc rõ ràng (sử dụng in đậm, danh sách gạch đầu dòng, emoji phù hợp). "
+                "Không trả lời quá dài dòng trừ khi người dùng yêu cầu chi tiết."
+            )
+        }
+    ]
+    
+    if history:
+        messages.extend(history)
+        
+    messages.append({"role": "user", "content": user_query})
+    
+    # Danh sách các mô hình ưu tiên trên Groq
+    models_to_try = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+    
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 1500
+        }
+        try:
+            res = requests.post(url, headers=headers, json=payload, timeout=20)
+            if res.status_code == 200:
+                data = res.json()
+                answer = data["choices"][0]["message"]["content"]
+                if answer and answer.strip():
+                    return answer.strip()
+        except Exception:
+            continue
+            
+    return "❌ Xin lỗi, hệ thống AI hiện đang bận hoặc quá tải. Vui lòng thử lại sau ít giây!"
+
+
+# =======================================================
 # 6. GIAO DIỆN LỆNH & XỬ LÝ TRONG NHÓM CHAT (GROUP & PRIVATE)
 # =======================================================
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     help_text = (
-        "👋 <b>Chào mừng bạn đến với Bot Tải Video Đa Nền Tảng!</b>\n\n"
-        "✨ <b>Cách sử dụng trong Group hoặc Chat riêng:</b>\n"
-        "1️⃣ <b>Gửi trực tiếp link:</b> Chỉ cần dán link TikTok, Facebook hoặc YouTube vào khung chat.\n"
-        "2️⃣ <b>Dùng lệnh:</b> <code>/dl [link]</code> hoặc <code>/down [link]</code>\n"
-        "3️⃣ <b>Reply tin nhắn:</b> Gõ <code>/dl</code> trả lời tin nhắn có chứa link.\n\n"
-        "🎬 <i>Bot hỗ trợ bóc tách video HD, không logo, xoay tua nhiều máy chủ tự động!</i>"
+        "👋 <b>Chào mừng bạn đến với Bot Đa Năng!</b>\n\n"
+        "✨ <b>Các tính năng chính:</b>\n"
+        "1️⃣ <b>Tải Video HD:</b> Dán link TikTok, Facebook, YouTube để tải video không logo.\n"
+        "2️⃣ <b>Rút gọn Link:</b> Gửi bất kỳ link web nào để rút gọn nhanh qua <b>Link999</b> (.win / .app).\n"
+        "3️⃣ <b>Chat với AI:</b> Chỉ cần gõ dấu chấm <code>.</code> ở đầu câu hỏi!\n"
+        "   👉 <i>Ví dụ:</i> <code>.thời tiết hôm nay thế nào</code> hoặc <code>.viết caption tiktok hài hước</code>\n\n"
+        "💬 <i>Trong tin nhắn riêng tư với Bot, bạn có thể trò chuyện trực tiếp như ChatGPT!</i>"
     )
     bot.reply_to(message, help_text, parse_mode="HTML")
 
@@ -1032,7 +1091,7 @@ def process_download_request(message, raw_url, platform):
 # XỬ LÝ RÚT GỌN LINK THƯỜNG & NÚT BẤM WIN / APP
 # -------------------------------------------------------
 
-@bot.message_handler(func=lambda msg: msg.text and not msg.text.startswith('/') and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is not None)
+@bot.message_handler(func=lambda msg: msg.text and not msg.text.startswith('/') and not msg.text.startswith('.') and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is not None)
 def handle_general_url_message(message):
     """Tự động bắt link thông thường (không phải TikTok, FB, YT) để hỏi rút gọn link"""
     gen_url = extract_general_url(message.text)
@@ -1191,6 +1250,87 @@ def handle_shorten_callback(call):
             message_id=call.message.message_id,
             parse_mode="HTML"
         )
+
+
+# =======================================================
+# XỬ LÝ TRÒ CHUYỆN AI (BẮT ĐẦU BẰNG DẤU CHẤM '.')
+# =======================================================
+
+@bot.message_handler(func=lambda msg: msg.text and (
+    msg.text.startswith('.') 
+    or msg.text.startswith('/ai') 
+    or msg.text.startswith('/gpt')
+    or (msg.chat.type == 'private' and not msg.text.startswith('/') and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is None)
+))
+def handle_ai_chat_message(message):
+    """
+    Xử lý khi thành viên nhóm gọi AI bằng cách bắt đầu tin nhắn với dấu chấm '.'
+    hoặc dùng lệnh /ai, /gpt, hoặc nhắn tin trực tiếp trong chat riêng
+    """
+    user_id = message.from_user.id if message.from_user else None
+    user_name = (message.from_user.first_name if message.from_user else None) or "Người dùng"
+
+    # Kiểm tra người dùng có bị khóa không
+    if user_id and is_user_blocked(user_id):
+        return
+
+    raw_text = message.text.strip()
+
+    # Trích xuất câu hỏi cần hỏi AI
+    if raw_text.startswith('.'):
+        query = raw_text[1:].strip()
+    elif raw_text.startswith('/ai'):
+        query = raw_text[3:].strip()
+    elif raw_text.startswith('/gpt'):
+        query = raw_text[4:].strip()
+    else:
+        query = raw_text.strip()
+
+    # Bỏ qua nếu người dùng chỉ gõ dấu chấm hoặc dấu chấm liên tiếp (., .., ...)
+    if not query or query.replace('.', '').strip() == '':
+        return
+
+    print(f"🤖 [AI Query] {user_name} ({user_id}): {query[:50]}")
+
+    # Gửi hiệu ứng 'typing' để báo bot đang suy nghĩ
+    try:
+        bot.send_chat_action(message.chat.id, 'typing')
+    except Exception:
+        pass
+
+    # Nếu người dùng đang reply một tin nhắn của bot, lấy ngữ cảnh câu trả lời trước đó
+    history = []
+    if message.reply_to_message and message.reply_to_message.text:
+        history.append({
+            "role": "assistant",
+            "content": message.reply_to_message.text[:800]
+        })
+
+    # Gọi AI Groq
+    reply_text = call_groq_ai(query, history=history if history else None)
+
+    # Chia nhỏ nếu vượt quá giới hạn 4000 ký tự của Telegram
+    max_len = 4000
+    if len(reply_text) <= max_len:
+        chunks = [reply_text]
+    else:
+        chunks = [reply_text[i:i + max_len] for i in range(0, len(reply_text), max_len)]
+
+    for idx, chunk in enumerate(chunks):
+        try:
+            if idx == 0:
+                bot.reply_to(message, chunk, parse_mode="Markdown")
+            else:
+                bot.send_message(message.chat.id, chunk, parse_mode="Markdown")
+        except Exception:
+            # Fallback sang dạng text thông thường nếu Markdown của câu trả lời bị lỗi ký tự
+            try:
+                if idx == 0:
+                    bot.reply_to(message, chunk)
+                else:
+                    bot.send_message(message.chat.id, chunk)
+            except Exception as e:
+                print(f"Lỗi gửi tin nhắn AI: {e}")
 
 
 @bot.message_handler(commands=['admin', 'panel'])
