@@ -204,7 +204,17 @@ def call_api_5_7scorp(tiktok_url):
         if response.status_code == 200:
             res_json = response.json()
             video_url = res_json.get('video')
-            caption = res_json.get('title') or "Video tải từ Máy chủ dự phòng 5 ✨"
+            # Nếu API trả về dạng danh sách (list), lấy phần tử link đầu tiên
+            if isinstance(video_url, list) and video_url:
+                if isinstance(video_url[0], dict):
+                    video_url = video_url[0].get('url') or video_url[0].get('play_url')
+                else:
+                    video_url = str(video_url[0])
+            elif isinstance(video_url, str):
+                video_url = video_url.strip()
+
+            caption = res_json.get('title') or res_json.get('desc') or "Video tải từ Máy chủ dự phòng 5 ✨"
+            
             if video_url:
                 print("[+] API 5 (7scorp) bóc link thành công!")
                 return video_url, caption

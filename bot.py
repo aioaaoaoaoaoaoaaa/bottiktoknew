@@ -5,6 +5,16 @@ import threading
 import time
 import os
 import json
+import sys
+
+# Cấu hình UTF-8 cho console Windows để hiển thị tiếng Việt và emoji không bị lỗi
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        sys.stdin.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 from datetime import datetime, date
 from dotenv import load_dotenv
 from flask import Flask, request
@@ -369,9 +379,8 @@ def increment_usage(user_id, platform='tiktok'):
 # CẤU HÌNH THÔNG TIN BOT VÀ TOKEN CHUNG
 # =======================================================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN không được tìm thấy trong biến môi trường!")
-bot = telebot.TeleBot(BOT_TOKEN)
+# Dùng dummy token nếu chưa cấu hình BOT_TOKEN để vẫn chạy được chế độ test API
+bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else telebot.TeleBot("123456:dummy_token_for_testing")
 
 # Key tài khoản RapidAPI dùng chung của bạn
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
@@ -524,7 +533,16 @@ def call_api_5_7scorp(tiktok_url):
             
             # Bóc tách chuẩn theo Response body trên ảnh của bạn
             video_url = res_json.get('video')
-            caption = res_json.get('title') or "Video tải từ Máy chủ dự phòng 5 ✨"
+            # Nếu API trả về dạng danh sách (list), lấy phần tử link đầu tiên
+            if isinstance(video_url, list) and video_url:
+                if isinstance(video_url[0], dict):
+                    video_url = video_url[0].get('url') or video_url[0].get('play_url')
+                else:
+                    video_url = str(video_url[0])
+            elif isinstance(video_url, str):
+                video_url = video_url.strip()
+
+            caption = res_json.get('title') or res_json.get('desc') or "Video tải từ Máy chủ dự phòng 5 ✨"
             
             if video_url:
                 print("[+] API 5 (7scorp) bóc link thành công!")
@@ -1143,9 +1161,109 @@ def handle_message(message):
         bot.edit_message_text(error_msg, chat_id=message.chat.id, message_id=status_msg.message_id)
 
 
+
+
+def test_tiktok_apis(raw_url):
+    """Hàm kiểm tra chi tiết từng máy chủ API TikTok và thử tải file thực tế về máy"""
+    raw_url = raw_url.strip()
+    if not raw_url:
+        return
+
+    print("\n" + "="*60)
+    print(f"🔍 BẮT ĐẦU KIỂM TRA LINK: {raw_url}")
+    print("="*60)
+
+    # Giải mã link rút gọn nếu là vt.tiktok.com hoặc vm.tiktok.com
+    actual_url = raw_url
+    if "vt.tiktok.com" in raw_url or "vm.tiktok.com" in raw_url:
+        try:
+            print("[*] Phát hiện link rút gọn, đang giải mã sang link gốc...")
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            res = requests.get(raw_url, headers=headers, allow_redirects=True, stream=True, timeout=8)
+            actual_url = res.url
+            print(f"[+] Link sau giải mã: {actual_url}")
+        except Exception as e:
+            print(f"[-] Không thể mở link rút gọn: {e}")
+
+    api_servers = [
+        {"name": "Máy chủ 1: TikTok Scrapper", "func": call_api_1_scrapper},
+        {"name": "Máy chủ 2: Social Media Downloader", "func": call_api_2_social_media},
+        {"name": "Máy chủ 3: Tiktok API23", "func": call_api_3_tiktok_api23},
+        {"name": "Máy chủ 4: No Watermark 2", "func": call_api_4_no_watermark2},
+        {"name": "Máy chủ 5: 7scorp Downloader", "func": call_api_5_7scorp}
+    ]
+
+    working_apis = []
+
+    for idx, server in enumerate(api_servers, 1):
+        print(f"\n👉 [TEST {idx}/5] {server['name']}...")
+        try:
+            start_time = time.time()
+            video_url, caption = server["func"](actual_url)
+            elapsed = time.time() - start_time
+
+            if video_url:
+                print(f"   ✅ Bóc link thành công ({elapsed:.2f}s)!")
+                print(f"   📌 Tiêu đề: {caption[:70] if caption else 'Không có'}")
+                print(f"   🔗 Link video: {video_url[:80]}...")
+                
+                # Tiến hành kiểm tra tải file về máy
+                print(f"   ⬇️ Đang thử tải video về đĩa...")
+                dl_headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://www.tiktok.com/"
+                }
+                v_res = requests.get(video_url, headers=dl_headers, stream=True, timeout=15)
+                if v_res.status_code == 200:
+                    output_file = f"test_tiktok_server_{idx}.mp4"
+                    downloaded_size = 0
+                    with open(output_file, 'wb') as f:
+                        for chunk in v_res.iter_content(chunk_size=1024 * 64):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded_size += len(chunk)
+                    
+                    size_mb = downloaded_size / (1024 * 1024)
+                    print(f"   🎉 TẢI THÀNH CÔNG! Đã lưu: {output_file} ({size_mb:.2f} MB)")
+                    working_apis.append({
+                        "name": server['name'],
+                        "speed": f"{elapsed:.2f}s",
+                        "size": f"{size_mb:.2f} MB",
+                        "file": output_file
+                    })
+                else:
+                    print(f"   ⚠️ Link không tải được: HTTP Status {v_res.status_code}")
+            else:
+                print(f"   ❌ Thất bại: Không lấy được link từ API này.")
+        except Exception as e:
+            print(f"   ❌ Lỗi ngoại lệ: {e}")
+
+    print("\n" + "="*60)
+    print(f"📊 BÁO CÁO TỔNG KẾT ({len(working_apis)}/{len(api_servers)} API hoạt động tốt):")
+    if working_apis:
+        for item in working_apis:
+            print(f"   ✔️ {item['name']} | Tốc độ: {item['speed']} | Dung lượng: {item['size']} -> {item['file']}")
+    else:
+        print("   ❌ Không có API nào tải được video. Kiểm tra lại RAPIDAPI_KEY hoặc quota tài khoản.")
+    print("="*60 + "\n")
+
 if __name__ == "__main__":
-    print("[*] Bot Telegram Tải TikTok 5 Máy Chủ Xoay Tua Đang Hoạt Động...")
-    
+    # Hỗ trợ cờ dòng lệnh: python bot.py --test [link]
+    if len(sys.argv) > 1 and sys.argv[1] in ['--test', 'test', '-t']:
+        if len(sys.argv) > 2:
+            test_tiktok_apis(sys.argv[2])
+        else:
+            while True:
+                try:
+                    url_input = input("\n👉 Nhập link video TikTok để test (gõ 'q' để dừng): ").strip()
+                    if not url_input or url_input.lower() == 'q':
+                        print("[*] Kết thúc kiểm tra.")
+                        break
+                    test_tiktok_apis(url_input)
+                except (EOFError, KeyboardInterrupt):
+                    break
+        sys.exit(0)
+
     port = int(os.environ.get('PORT', 5000))
     
     # Kiểm tra xem có URL Render không để quyết định dùng webhook hay polling
@@ -1153,6 +1271,12 @@ if __name__ == "__main__":
     
     if render_url:
         # Chạy trên Render - sử dụng webhook
+                # Kiểm tra BOT_TOKEN trước khi chạy bot
+        if not BOT_TOKEN:
+            print("\n❌ LỖI: BOT_TOKEN chưa được cấu hình trong file .env!")
+            print("👉 Để chạy Bot Telegram, vui lòng điền BOT_TOKEN vào file .env.")
+            sys.exit(1)
+        print("[*] Bot Telegram Tải TikTok 5 Máy Chủ Xoay Tua Đang Hoạt Động...")
         webhook_url = f"{render_url}/webhook"
         print(f"[*] Đang chạy trên Render: {render_url}")
         print(f"[*] Setting webhook: {webhook_url}")
@@ -1166,7 +1290,38 @@ if __name__ == "__main__":
         # Chạy Flask app (webhook sẽ tự xử lý)
         app.run(host='0.0.0.0', port=port)
     else:
+        # Chạy local
+        print("\n" + "="*50)
+        print("🤖 CHỌN CHẾ ĐỘ CHẠY TRÊN MÁY (LOCAL):")
+        print("1. Chạy Bot Telegram (Mặc định)")
+        print("2. Test các API tải video TikTok trong Terminal")
+        print("="*50)
+        
+        choice = "1"
+        try:
+            choice = input("👉 Nhập lựa chọn (1 hoặc 2, Enter để chạy Bot): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            choice = "1"
+            
+        if choice == "2":
+            while True:
+                try:
+                    url_input = input("\n👉 Nhập link TikTok cần test (gõ 'q' để thoát): ").strip()
+                    if not url_input or url_input.lower() == 'q':
+                        print("[*] Kết thúc kiểm tra.")
+                        break
+                    test_tiktok_apis(url_input)
+                except (EOFError, KeyboardInterrupt):
+                    break
+            sys.exit(0)
+
         # Chạy local - sử dụng polling
+                # Kiểm tra BOT_TOKEN trước khi chạy bot
+        if not BOT_TOKEN:
+            print("\n❌ LỖI: BOT_TOKEN chưa được cấu hình trong file .env!")
+            print("👉 Để chạy Bot Telegram, vui lòng điền BOT_TOKEN vào file .env.")
+            sys.exit(1)
+        print("[*] Bot Telegram Tải TikTok 5 Máy Chủ Xoay Tua Đang Hoạt Động...")
         print(f"[*] Chạy local với polling")
         
         # Xóa webhook để dùng polling
