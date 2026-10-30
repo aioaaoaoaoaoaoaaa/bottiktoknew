@@ -823,8 +823,13 @@ def call_groq_ai(user_query, history=None):
         
     messages.append({"role": "user", "content": user_query})
     
-    # Danh sách các mô hình ưu tiên trên Groq
-    models_to_try = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+    # Danh sách các mô hình hỏi đáp ưu tiên trên Groq (tự động luân chuyển dự phòng nếu một model lỗi)
+    models_to_try = [
+        "qwen/qwen3.8-27b",      # Ưu tiên 1: Thông minh nhất, tiếng Việt tự nhiên nhất (1.000 lượt/ngày)
+        "openai/gpt-oss-120b",   # Dự phòng 1: Mô hình lớn 120B cực mạnh (1.000 lượt/ngày)
+        "openai/gpt-oss-20b",    # Dự phòng 2: Mô hình 20B nhanh nhẹn (1.000 lượt/ngày)
+        "allam-2-7b"             # Dự phòng 3: Hạn mức siêu khủng (7.000 lượt/ngày)
+    ]
     
     for model_name in models_to_try:
         payload = {
@@ -840,7 +845,10 @@ def call_groq_ai(user_query, history=None):
                 answer = data["choices"][0]["message"]["content"]
                 if answer and answer.strip():
                     return answer.strip()
-        except Exception:
+            else:
+                print(f"⚠️ Model {model_name} trả về mã {res.status_code} -> Tự động chuyển model tiếp theo...")
+        except Exception as e:
+            print(f"⚠️ Model {model_name} gặp ngoại lệ: {e} -> Tự động chuyển model tiếp theo...")
             continue
             
     return "❌ Xin lỗi, hệ thống AI hiện đang bận hoặc quá tải. Vui lòng thử lại sau ít giây!"
