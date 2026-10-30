@@ -6,6 +6,7 @@ import time
 import os
 import sys
 import json
+import uuid
 
 # Cấu hình UTF-8 cho console Windows
 if sys.platform == 'win32':
@@ -636,9 +637,98 @@ def call_yt_api_shorts_downloader_v3(yt_url):
 # 5. BỘ TRÍCH XUẤT VÀ KIỂM TRA ĐỊNH DẠNG LINK
 # =======================================================
 
+
+# =======================================================
+# CẤU HÌNH & XỬ LÝ RÚT GỌN LINK (LINK999 WIN / APP)
+# =======================================================
+LINK999_API_TOKEN = os.getenv("LINK999_API_TOKEN", "c4aa527702c6a8fe6cb1d1427bfbb10dbebfddc2")
+pending_shorten_links = {}
+
+def cleanup_pending_links():
+    """Dọn dẹp các link tạm quá 1 tiếng để tránh chiếm bộ nhớ"""
+    now = time.time()
+    expired = [k for k, v in pending_shorten_links.items() if now - v.get("created_at", 0) > 3600]
+    for k in expired:
+        pending_shorten_links.pop(k, None)
+
+def call_shorten_link999(long_url, domain="app"):
+    """
+    Rút gọn link qua API link999.app hoặc link999.win
+    """
+    domain_clean = "win" if domain.lower() == "win" else "app"
+    api_url = f"https://link999.{domain_clean}/api"
+    params = {
+        "api": LINK999_API_TOKEN,
+        "url": long_url
+    }
+    try:
+        res = requests.get(api_url, params=params, timeout=12)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("status") == "success" and data.get("shortenedUrl"):
+                return data.get("shortenedUrl"), None
+            else:
+                return None, data.get("message", "API trả về không thành công")
+        return None, f"HTTP Status {res.status_code}"
+    except Exception as e:
+        return None, str(e)
+
+def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_message_id=None, prefix_text=""):
+    """
+    Hiển thị thông báo hỏi người dùng muốn rút gọn với đuôi win hay app
+    """
+    cleanup_pending_links()
+    
+    # Tự động xóa tin nhắn gốc chứa link để giữ nhóm sạch sẽ
+    if original_message_id:
+        try:
+            bot.delete_message(chat_id, original_message_id)
+        except Exception:
+            pass
+
+    link_id = uuid.uuid4().hex[:8]
+    pending_shorten_links[link_id] = {
+        "url": target_url,
+        "user_id": user_id,
+        "user_name": user_name,
+        "created_at": time.time()
+    }
+
+    # Bàn phím Inline gồm 2 nút: win và app
+    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+    btn_win = telebot.types.InlineKeyboardButton("🌐 Link999 (.win)", callback_data=f"shorten:win:{link_id}")
+    btn_app = telebot.types.InlineKeyboardButton("🌐 Link999 (.app)", callback_data=f"shorten:app:{link_id}")
+    markup.add(btn_win, btn_app)
+
+    display_url = target_url
+    if len(display_url) > 45:
+        display_url = display_url[:42] + "..."
+
+    msg_text = (
+        f"{prefix_text}"
+        f"🔗 <b>Link:</b> <code>{display_url}</code>\n"
+        f"👤 <b>Yêu cầu bởi:</b> {user_name}\n\n"
+        f"❓ <b>Bạn muốn rút gọn link với đuôi nào?</b>"
+    )
+    bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML")
+
 TIKTOK_REGEX = r'https?://(?:www\.|vm\.|vt\.)?tiktok\.com/[^\s]+'
 FACEBOOK_REGEX = r'https?://(?:www\.|web\.|m\.)?(?:facebook\.com|fb\.watch|fb\.com)/[^\s]+'
 YOUTUBE_REGEX = r'https?://(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|embed/|v/)|youtu\.be/)[^\s]+'
+
+GENERAL_URL_REGEX = r'https?://[^\s<>"]+|www\.[^\s<>"]+'
+
+def extract_general_url(text):
+    """Trích xuất bất kỳ đường link URL nào từ tin nhắn"""
+    if not text:
+        return None
+    match = re.search(GENERAL_URL_REGEX, text, re.IGNORECASE)
+    if match:
+        url = match.group(0)
+        if url.startswith("www."):
+            url = "https://" + url
+        return url
+    return None
 
 def extract_media_url(text):
     """
@@ -879,12 +969,21 @@ def process_download_request(message, raw_url, platform):
             platform=platform,
             server_name="Tất cả máy chủ thất bại",
             success=False,
-            error_msg="Không máy chủ nào bóc được link"
+            error_msg="Không máy chủ nào bóc được link (chuyển sang rút gọn)"
         )
-        bot.edit_message_text(
-            "💥 Không thể lấy được video từ link này (máy chủ bận hoặc link riêng tư/không hỗ trợ). Vui lòng thử lại sau!",
+        # Xóa tin nhắn trạng thái cũ
+        try:
+            bot.delete_message(message.chat.id, status_msg.message_id)
+        except Exception:
+            pass
+            
+        # Tự động chuyển sang chức năng rút gọn link khi không tải được video
+        prompt_shorten_link(
             chat_id=message.chat.id,
-            message_id=status_msg.message_id
+            user_id=user_id,
+            user_name=user_name,
+            target_url=raw_url,
+            prefix_text="⚠️ <b>Không thể tải trực tiếp video từ link này.</b>\n👉 <i>Tự động chuyển sang chức năng rút gọn link:</i>\n\n"
         )
 
 
@@ -892,6 +991,170 @@ def process_download_request(message, raw_url, platform):
 # =======================================================
 # BỘ LỆNH ĐIỀU KHIỂN DÀNH CHO ADMIN
 # =======================================================
+
+
+# -------------------------------------------------------
+# XỬ LÝ RÚT GỌN LINK THƯỜNG & NÚT BẤM WIN / APP
+# -------------------------------------------------------
+
+@bot.message_handler(func=lambda msg: msg.text and not msg.text.startswith('/') and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is not None)
+def handle_general_url_message(message):
+    """Tự động bắt link thông thường (không phải TikTok, FB, YT) để hỏi rút gọn link"""
+    gen_url = extract_general_url(message.text)
+    if gen_url:
+        user_id = message.from_user.id if message.from_user else None
+        user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
+        
+        # Kiểm tra người dùng có bị khóa không
+        if user_id and is_user_blocked(user_id):
+            try:
+                bot.delete_message(message.chat.id, message.message_id)
+            except Exception:
+                pass
+            return
+
+        prompt_shorten_link(
+            chat_id=message.chat.id,
+            user_id=user_id,
+            user_name=user_name,
+            target_url=gen_url,
+            original_message_id=message.message_id
+        )
+
+
+@bot.channel_post_handler(func=lambda msg: msg.text and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is not None)
+def handle_general_channel_post(message):
+    """Tự động bắt link thông thường trong Kênh để hỏi rút gọn link"""
+    gen_url = extract_general_url(message.text)
+    if gen_url:
+        prompt_shorten_link(
+            chat_id=message.chat.id,
+            user_id=None,
+            user_name="Kênh",
+            target_url=gen_url,
+            original_message_id=message.message_id
+        )
+
+
+@bot.message_handler(commands=['shorten', 'rutgon'])
+def handle_shorten_command(message):
+    """Lệnh rút gọn link thủ công: /shorten <link>"""
+    text = message.text or ""
+    parts = text.split(maxsplit=1)
+    target_text = parts[1] if len(parts) > 1 else ""
+    if not target_text and message.reply_to_message:
+        target_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    
+    gen_url = extract_general_url(target_text)
+    if not gen_url:
+        bot.reply_to(message, "⚠️ <b>Cách dùng:</b> <code>/shorten [link]</code> hoặc reply tin nhắn chứa link rồi gõ <code>/shorten</code>", parse_mode="HTML")
+        return
+        
+    user_id = message.from_user.id if message.from_user else None
+    user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
+    prompt_shorten_link(
+        chat_id=message.chat.id,
+        user_id=user_id,
+        user_name=user_name,
+        target_url=gen_url
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('shorten:'))
+def handle_shorten_callback(call):
+    """Xử lý sự kiện khi người dùng bấm nút win hoặc app"""
+    parts = call.data.split(':')
+    if len(parts) != 3:
+        bot.answer_callback_query(call.id, "Dữ liệu không hợp lệ")
+        return
+        
+    domain_choice = parts[1]  # "win" hoặc "app"
+    link_id = parts[2]
+    
+    link_data = pending_shorten_links.get(link_id)
+    if not link_data:
+        bot.answer_callback_query(call.id, "⚠️ Yêu cầu đã hết hạn! Vui lòng gửi lại link.", show_alert=True)
+        try:
+            bot.edit_message_text(
+                "⚠️ <i>Yêu cầu rút gọn link đã hết hạn. Vui lòng gửi lại link để thực hiện.</i>",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+        return
+        
+    target_url = link_data["url"]
+    clicker_name = (call.from_user.first_name if call.from_user else None) or "Người dùng"
+    
+    bot.answer_callback_query(call.id, f"Đang rút gọn với Link999 .{domain_choice}...")
+    
+    try:
+        bot.edit_message_text(
+            f"⏳ <b>Đang tạo link rút gọn với Link999 (.{domain_choice})...</b>",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+        
+    shortened_url, err = call_shorten_link999(target_url, domain=domain_choice)
+    
+    if shortened_url:
+        record_download_log(
+            user=call.from_user,
+            chat=call.message.chat,
+            raw_url=target_url,
+            platform=f"shorten_{domain_choice}",
+            server_name=f"Link999 (.{domain_choice})",
+            success=True
+        )
+        
+        pending_shorten_links.pop(link_id, None)
+        
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("🚀 Mở Link Rút Gọn", url=shortened_url))
+        
+        display_orig = target_url
+        if len(display_orig) > 50:
+            display_orig = display_orig[:47] + "..."
+
+        result_text = (
+            f"✅ <b>RÚT GỌN LINK THÀNH CÔNG!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 <b>Link gốc:</b> <code>{display_orig}</code>\n"
+            f"🌐 <b>Tên miền:</b> <code>link999.{domain_choice}</code>\n\n"
+            f"👉 <b>Link rút gọn:</b>\n"
+            f"<code>{shortened_url}</code>\n\n"
+            f"👤 <i>Thực hiện bởi: {clicker_name}</i>"
+        )
+        bot.edit_message_text(
+            result_text,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=markup,
+            parse_mode="HTML"
+        )
+    else:
+        record_download_log(
+            user=call.from_user,
+            chat=call.message.chat,
+            raw_url=target_url,
+            platform=f"shorten_{domain_choice}",
+            server_name=f"Link999 (.{domain_choice})",
+            success=False,
+            error_msg=err or "Lỗi rút gọn"
+        )
+        bot.edit_message_text(
+            f"❌ <b>Không thể rút gọn link:</b> {err or 'Lỗi kết nối'}\n"
+            f"Vui lòng thử lại sau hoặc thử với tên miền khác!",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML"
+        )
+
 
 @bot.message_handler(commands=['admin', 'panel'])
 def handle_admin_panel(message):
