@@ -10,6 +10,7 @@ import uuid
 import base64
 import urllib.parse
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
 
 # Cấu hình UTF-8 cho console Windows
 if sys.platform == 'win32':
@@ -859,6 +860,14 @@ def clean_ai_response(text):
     text = text.replace('*', '')
     return text.strip()
 
+def get_vietnam_time_str():
+    """Lấy ngày giờ thực tế hiện tại theo múi giờ Việt Nam (UTC+7)"""
+    vn_tz = timezone(timedelta(hours=7))
+    now = datetime.now(vn_tz)
+    weekdays = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"]
+    day_name = weekdays[int(now.strftime("%w"))]
+    return f"{day_name}, ngày {now.day} tháng {now.month} năm {now.year}, bây giờ là {now.strftime('%H:%M')} (theo giờ Việt Nam)"
+
 def call_groq_ai(user_query, history=None, user_name="bạn"):
     """
     Gọi API Groq để trả lời câu hỏi của người dùng với nhân vật AI Tày
@@ -881,11 +890,14 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
             "hãy ưu tiên sử dụng để cung cấp câu trả lời mới nhất, chính xác nhất:\n" + web_info
         )
 
+    vn_time = get_vietnam_time_str()
     sys_content = (
         "Tên của bạn là Tày - một người bạn AI thông minh, cực kỳ thân thiện, gần gũi và vui vẻ trên Telegram. "
+        f"MỐC THỜI GIAN THỰC TẾ HIỆN TẠI: {vn_time}. "
         "Quy tắc trả lời:\n"
         "- Bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày nghĩ là...', 'Để Tày chỉ cho nhé') "
         "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ".\n"
+        "- Khi người dùng hỏi hôm nay là ngày mấy, thứ mấy, mấy giờ hoặc thời gian, bạn hãy luôn dùng MỐC THỜI GIAN THỰC TẾ trên để trả lời chính xác 100%.\n"
         "- Trả lời thật ngắn gọn, súc tích, dễ hiểu, đi thẳng vào trọng tâm, câu từ tự nhiên và thân mật như bạn bè.\n"
         "- TUYỆT ĐỐI KHÔNG dùng các ký tự Markdown như dấu sao * hoặc dấu thăng # (không viết *, **, #, ##, ###).\n"
         "- Khi liệt kê các ý hoặc các bước, hãy bắt đầu mỗi dòng bằng dấu gạch ngang '-' để dễ nhìn."
