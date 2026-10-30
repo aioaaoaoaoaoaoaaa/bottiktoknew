@@ -734,7 +734,7 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
 
     msg_text = (
         f"{prefix_text}"
-        f"🔗 {target_url}\n"
+        f"🔗 : {target_url}\n"
         f"👤 : {user_identity}\n\n"
         f"❓ <b>Bạn chọn host nào</b>"
     )
@@ -1160,7 +1160,7 @@ def handle_shorten_callback(call):
         
         creator_info = format_user_identity(user=call.from_user)
         result_text = (
-            f"🔗 <b>Link gốc:</b> {target_url}\n"
+            f"🔗 : {target_url}\n"
             f"🌐 <b>Host:</b> link999.{domain_choice}\n"
             f"👉 <b>Link rút gọn:</b> <code>{shortened_url}</code>\n\n"
             f"👤 : {creator_info}"
