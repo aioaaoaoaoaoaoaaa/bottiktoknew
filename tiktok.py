@@ -1160,8 +1160,6 @@ def handle_shorten_callback(call):
         
         creator_info = format_user_identity(user=call.from_user)
         result_text = (
-            f"✅<b>Success</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🔗 <b>Link gốc:</b> {target_url}\n"
             f"🌐 <b>Host:</b> link999.{domain_choice}\n"
             f"👉 <b>Link rút gọn:</b> <code>{shortened_url}</code>\n\n"
