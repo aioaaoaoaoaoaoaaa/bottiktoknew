@@ -886,8 +886,8 @@ def send_welcome(message):
         "✨ <b>Các tính năng chính:</b>\n"
         "1️⃣ <b>Tải Video HD:</b> Dán link TikTok, Facebook, YouTube để tải video không logo.\n"
         "2️⃣ <b>Rút gọn Link:</b> Gửi bất kỳ link web nào để rút gọn nhanh qua <b>Link999</b> (.win / .app).\n"
-        "3️⃣ <b>Chat với AI Tày:</b> Chỉ cần gõ dấu chấm <code>.</code> ở đầu câu hỏi!\n"
-        "   👉 <i>Ví dụ:</i> <code>.Tày ơi thời tiết hôm nay thế nào</code> hoặc <code>.viết caption tiktok hài hước</code>\n\n"
+        "3️⃣ <b>Chat với AI Tày:</b> Đặt dấu chấm <code>.</code> ở đầu hoặc cuối câu hỏi!\n"
+        "   👉 <i>Ví dụ:</i> <code>.thời tiết hôm nay thế nào</code> hoặc <code>hôm nay ăn gì.</code>\n\n"
         "💬 <i>Trong tin nhắn riêng tư với Bot, bạn có thể trò chuyện trực tiếp với Tày như bạn bè!</i>"
     )
     bot.reply_to(message, help_text, parse_mode="HTML")
@@ -1282,19 +1282,37 @@ def handle_shorten_callback(call):
 
 
 # =======================================================
-# XỬ LÝ TRÒ CHUYỆN AI (BẮT ĐẦU BẰNG DẤU CHẤM '.')
+# XỬ LÝ TRÒ CHUYỆN AI (DẤU CHẤM '.' Ở ĐẦU HOẶC CUỐI CÂU)
 # =======================================================
 
-@bot.message_handler(func=lambda msg: msg.text and (
-    msg.text.startswith('.') 
-    or msg.text.startswith('/ai') 
-    or msg.text.startswith('/gpt')
-    or (msg.chat.type == 'private' and not msg.text.startswith('/') and extract_media_url(msg.text)[0] is None and extract_general_url(msg.text) is None)
-))
+def is_ai_trigger_message(msg):
+    """Kiểm tra tin nhắn có kích hoạt AI không (dấu chấm ở đầu hoặc cuối câu, hoặc /ai, /gpt)"""
+    if not msg.text:
+        return False
+    text = msg.text.strip()
+    if not text or text.replace('.', '').strip() == '':
+        return False
+    # Dấu chấm ở đầu câu: .câu hỏi
+    if text.startswith('.'):
+        return True
+    # Đúng 1 dấu chấm ở cuối câu: câu hỏi. (tránh dấu ba chấm .. hoặc ...)
+    if text.endswith('.') and not text.endswith('..'):
+        return True
+    # Dùng lệnh /ai hoặc /gpt
+    if text.startswith('/ai') or text.startswith('/gpt'):
+        return True
+    # Chat riêng với bot
+    if msg.chat.type == 'private' and not text.startswith('/') and extract_media_url(text)[0] is None and extract_general_url(text) is None:
+        return True
+    return False
+
+@bot.message_handler(func=is_ai_trigger_message)
 def handle_ai_chat_message(message):
     """
-    Xử lý khi thành viên nhóm gọi AI bằng cách bắt đầu tin nhắn với dấu chấm '.'
-    hoặc dùng lệnh /ai, /gpt, hoặc nhắn tin trực tiếp trong chat riêng
+    Xử lý khi thành viên gọi AI:
+    - Bắt đầu bằng dấu chấm: .câu hỏi
+    - Kết thúc bằng đúng 1 dấu chấm: câu hỏi.
+    - Dùng lệnh /ai, /gpt hoặc chat riêng
     """
     user_id = message.from_user.id if message.from_user else None
     user_name = (message.from_user.first_name if message.from_user else None) or "Người dùng"
@@ -1307,7 +1325,11 @@ def handle_ai_chat_message(message):
 
     # Trích xuất câu hỏi cần hỏi AI
     if raw_text.startswith('.'):
-        query = raw_text[1:].strip()
+        query = raw_text.lstrip('.').strip()
+        if query.endswith('.') and not query.endswith('..'):
+            query = query[:-1].strip()
+    elif raw_text.endswith('.') and not raw_text.endswith('..'):
+        query = raw_text[:-1].strip()
     elif raw_text.startswith('/ai'):
         query = raw_text[3:].strip()
     elif raw_text.startswith('/gpt'):
@@ -1315,7 +1337,7 @@ def handle_ai_chat_message(message):
     else:
         query = raw_text.strip()
 
-    # Bỏ qua nếu người dùng chỉ gõ dấu chấm hoặc dấu chấm liên tiếp (., .., ...)
+    # Bỏ qua nếu người dùng chỉ gõ dấu chấm hoặc câu hỏi rỗng
     if not query or query.replace('.', '').strip() == '':
         return
 
