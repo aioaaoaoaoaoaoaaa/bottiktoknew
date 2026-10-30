@@ -798,6 +798,11 @@ def extract_media_url(text):
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+def get_gemini_api_keys():
+    """Lấy danh sách các API Key Gemini (hỗ trợ nhập nhiều key cách nhau bằng dấu phẩy, chấm phẩy hoặc xuống dòng)"""
+    raw_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY") or ""
+    return [k.strip() for k in re.split(r'[,;\n]+', raw_keys) if k.strip()]
+
 def search_realtime_web(query, max_items=4):
     """
     Tìm kiếm thông tin thời gian thực từ Google News RSS và Wikipedia (hoàn toàn miễn phí, cập nhật mới nhất)
@@ -871,9 +876,11 @@ def get_vietnam_time_str():
 
 def call_gemini_ai(user_query, sys_content, history=None):
     """
-    Gọi Google Gemini API (Ưu tiên số 1): gemini-3.5-flash, gemini-3.1-flash-lite, gemini-3-flash-preview
+    Gọi Google Gemini API (Ưu tiên số 1): Tự động xoay tua đa Key.
+    Nếu Key 1 hết quota (429) hoặc lỗi -> Tự động nhảy sang Key 2, Key 3...
     """
-    if not GEMINI_API_KEY:
+    gemini_keys = get_gemini_api_keys()
+    if not gemini_keys:
         return None
         
     models_to_try = [
@@ -913,21 +920,28 @@ def call_gemini_ai(user_query, sys_content, history=None):
         }
     }
     
-    for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        try:
-            res = requests.post(url, json=payload, timeout=12)
-            if res.status_code == 200:
-                data = res.json()
-                candidate = data.get("candidates", [{}])[0]
-                text = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
-                if text and text.strip():
-                    return text.strip()
-            else:
-                print(f"⚠️ Gemini model {model_name} trả về mã {res.status_code} -> Thử model tiếp theo...")
-        except Exception as e:
-            print(f"⚠️ Gemini model {model_name} ngoại lệ: {e}")
-            continue
+    # Duyệt lần lượt qua từng API Key Gemini đã cấu hình
+    for key_idx, current_key in enumerate(gemini_keys, 1):
+        key_masked = current_key[-6:] if len(current_key) > 6 else f"key{key_idx}"
+        
+        for model_name in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={current_key}"
+            try:
+                res = requests.post(url, json=payload, timeout=12)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidate = data.get("candidates", [{}])[0]
+                    text = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if text and text.strip():
+                        return text.strip()
+                elif res.status_code == 429:
+                    print(f"⚠️ Gemini Key #{key_idx} (...{key_masked}) chạm giới hạn 429 -> Tự động đổi sang Key tiếp theo...")
+                    break  # Key này hết hạn mức ngày, lập tức bỏ qua và thử Key kế tiếp
+                else:
+                    print(f"⚠️ Gemini Key #{key_idx} model {model_name} HTTP {res.status_code} -> Thử model khác...")
+            except Exception as e:
+                print(f"⚠️ Gemini Key #{key_idx} model {model_name} ngoại lệ: {e}")
+                continue
             
     return None
 
