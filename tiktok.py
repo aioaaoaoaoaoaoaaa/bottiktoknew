@@ -4,6 +4,16 @@ import telebot
 import threading
 import time
 import os
+import sys
+
+# Cấu hình UTF-8 cho console Windows
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        sys.stdin.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 from dotenv import load_dotenv
 from flask import Flask, request
 
@@ -724,8 +734,14 @@ if __name__ == "__main__":
         print(f"[*] Đang chạy chế độ Polling (Local/VPS)")
         bot.delete_webhook()
         
-        # Chạy ngầm Flask webserver cho health check
-        flask_thread = threading.Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': port})
+        # Chạy ngầm Flask webserver cho health check (bọc try-except tránh xung đột port)
+        def run_flask_safe():
+            try:
+                app.run(host='0.0.0.0', port=port)
+            except Exception as e:
+                print(f"[*] Cảnh báo Flask port {port}: {e}")
+
+        flask_thread = threading.Thread(target=run_flask_safe)
         flask_thread.daemon = True
         flask_thread.start()
         
