@@ -643,6 +643,7 @@ def call_yt_api_shorts_downloader_v3(yt_url):
 # =======================================================
 LINK999_API_TOKEN = os.getenv("LINK999_API_TOKEN", "c4aa527702c6a8fe6cb1d1427bfbb10dbebfddc2")
 pending_shorten_links = {}
+last_shorten_messages = {}  # Lưu {chat_id: message_id} của tin nhắn rút gọn gần nhất để tự xóa
 
 
 def format_user_identity(user=None, user_name=None, user_id=None, username=None):
@@ -698,12 +699,21 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
     """
     cleanup_pending_links()
     
-    # Tự động xóa tin nhắn gốc chứa link để giữ nhóm sạch sẽ
+    # 1. Tự động xóa tin nhắn gốc chứa link của người dùng để giữ nhóm sạch sẽ
     if original_message_id:
         try:
             bot.delete_message(chat_id, original_message_id)
         except Exception:
             pass
+
+    # 2. Tự động xóa kết quả/thông báo rút gọn trước đó trong nhóm để không bị rác
+    old_msg_id = last_shorten_messages.get(chat_id)
+    if old_msg_id:
+        try:
+            bot.delete_message(chat_id, old_msg_id)
+        except Exception:
+            pass
+        last_shorten_messages.pop(chat_id, None)
 
     link_id = uuid.uuid4().hex[:8]
     pending_shorten_links[link_id] = {
@@ -728,7 +738,11 @@ def prompt_shorten_link(chat_id, user_id, user_name, target_url, original_messag
         f"👤 : {user_identity}\n\n"
         f"❓ <b>Bạn chọn host nào</b>"
     )
-    bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML")
+    sent_msg = bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML")
+    
+    # Lưu lại message_id này để xóa khi có URL mới
+    if sent_msg:
+        last_shorten_messages[chat_id] = sent_msg.message_id
 
 TIKTOK_REGEX = r'https?://(?:www\.|vm\.|vt\.)?tiktok\.com/[^\s]+'
 FACEBOOK_REGEX = r'https?://(?:www\.|web\.|m\.)?(?:facebook\.com|fb\.watch|fb\.com)/[^\s]+'
@@ -1160,6 +1174,8 @@ def handle_shorten_callback(call):
             reply_markup=markup,
             parse_mode="HTML"
         )
+        # Cập nhật ID của kết quả rút gọn mới để xóa khi có URL tiếp theo
+        last_shorten_messages[call.message.chat.id] = call.message.message_id
     else:
         record_download_log(
             user=call.from_user,
