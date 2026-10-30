@@ -1080,7 +1080,12 @@ def handle_message(message):
     # Tăng count sử dụng theo nền tảng
     increment_usage(user_id, platform)
     
-    status_msg = bot.reply_to(message, "Process: 0%")
+    status_msg = bot.send_message(message.chat.id, "Process: 0%")
+    # Tự động xóa link video của người dùng khi bắt đầu gọi API xử lý
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
     
     # Bắt đầu chạy progress bar trong thread riêng biệt
     global progress_running

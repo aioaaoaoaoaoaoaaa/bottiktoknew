@@ -612,10 +612,17 @@ def process_download_request(message, raw_url, platform):
     """
     # Thông báo tiến trình
     user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
-    status_msg = bot.reply_to(
-        message, 
+    status_msg = bot.send_message(
+        message.chat.id, 
         f"⏳ Đang xử lý video cho {user_name}...\nTiến trình: 0%"
     )
+    
+    # Tự động xóa tin nhắn chứa link của người dùng ngay khi bắt đầu gọi API xử lý
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+        print(f"[+] Đã tự động xóa link video gốc (ID: {message.message_id})")
+    except Exception as e:
+        print(f"[-] Không thể xóa link video: {e}")
     
     global progress_running
     progress_running = True
@@ -673,13 +680,21 @@ def process_download_request(message, raw_url, platform):
         try:
             bot.edit_message_text("Đợi xíu video sẽ hiện sau ít giây", chat_id=message.chat.id, message_id=status_msg.message_id)
             
-            # Gửi video dưới dạng reply lại tin nhắn người gửi trong nhóm
-            bot.send_video(
-                chat_id=message.chat.id,
-                video=video_link,
-                caption=caption if caption else "🎬 Video đã được tải thành công!",
-                reply_to_message_id=message.message_id
-            )
+            # Gửi video thành phẩm
+            final_caption = f"🎬 <b>Video cho {user_name}:</b>\n\n{caption}" if caption else f"🎬 <b>Video cho {user_name}</b>"
+            try:
+                bot.send_video(
+                    chat_id=message.chat.id,
+                    video=video_link,
+                    caption=final_caption,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                bot.send_video(
+                    chat_id=message.chat.id,
+                    video=video_link,
+                    caption=caption if caption else "🎬 Video đã được tải thành công!"
+                )
             # Xóa tin nhắn trạng thái cho nhóm đỡ loãng
             bot.delete_message(message.chat.id, status_msg.message_id)
             print(f"[+] Đã gửi video thành công vào group {message.chat.id}!")
