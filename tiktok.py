@@ -588,12 +588,20 @@ def handle_direct_url_message(message):
         process_download_request(message, url, platform)
 
 
+@bot.channel_post_handler(func=lambda msg: msg.text and extract_media_url(msg.text)[0] is not None)
+def handle_channel_post(message):
+    """Tự động bắt link khi bài viết được đăng vào Kênh (Channel)"""
+    url, platform = extract_media_url(message.text)
+    if url:
+        process_download_request(message, url, platform)
+
+
 def process_download_request(message, raw_url, platform):
     """
     Hàm xử lý tải video chung cho cả Chat riêng và Nhóm Chat (Group)
     """
     # Thông báo tiến trình
-    user_name = message.from_user.first_name or "bạn"
+    user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
     status_msg = bot.reply_to(
         message, 
         f"⏳ Đang xử lý video cho {user_name}...\nTiến trình: 0%"
@@ -617,10 +625,10 @@ def process_download_request(message, raw_url, platform):
         api_servers = [
             {"name": "TikTok VIP 1 (TikWM HD Direct)", "func": call_api_tikwm_direct},
             {"name": "TikTok 2 (No Watermark HD)", "func": call_api_4_no_watermark2},
-            {"name": "TikTok 3 (Social Media)", "func": call_api_2_social_media},
-            {"name": "TikTok 4 (Scrapper)", "func": call_api_1_scrapper},
-            {"name": "TikTok 5 (API23)", "func": call_api_3_tiktok_api23},
-            {"name": "TikTok 6 (7scorp)", "func": call_api_5_7scorp}
+            {"name": "TikTok 3 (Scrapper)", "func": call_api_1_scrapper},
+            {"name": "TikTok 4 (7scorp)", "func": call_api_5_7scorp},
+            {"name": "TikTok 5 (Social Media)", "func": call_api_2_social_media},
+            {"name": "TikTok 6 (API23)", "func": call_api_3_tiktok_api23}
         ]
     elif platform == 'facebook':
         api_servers = [
@@ -641,7 +649,8 @@ def process_download_request(message, raw_url, platform):
 
     # Cơ chế xoay tua (Fallback)
     for server in api_servers:
-        print(f"[*] Group {message.chat.id} | User {message.from_user.id} -> Thử qua: {server['name']}...")
+        uid = message.from_user.id if message.from_user else "Channel"
+        print(f"[*] Group {message.chat.id} | User {uid} -> Thử qua: {server['name']}...")
         video_link, caption = server["func"](raw_url)
         if video_link:
             print(f"[+] Thành công tại {server['name']}.")
@@ -679,6 +688,17 @@ def process_download_request(message, raw_url, platform):
         )
 
 
+def keep_alive_ping(url):
+    """Tự động gửi request ping đến /health mỗi 10 phút để Render không bị tắt (Sleep mode)"""
+    while True:
+        time.sleep(600)  # 10 phút
+        try:
+            requests.get(url, timeout=10)
+            print(f"[Keep-Alive] Ping thành công tới {url}")
+        except Exception as e:
+            print(f"[Keep-Alive] Lỗi ping: {e}")
+
+
 if __name__ == "__main__":
     print("[*] Bot Tải Video Đa Nền Tảng Cho Group & Chat Riêng Đang Khởi Động...")
     port = int(os.environ.get('PORT', 5000))
@@ -691,6 +711,13 @@ if __name__ == "__main__":
         print(f"[*] Đang gắn webhook: {webhook_url}")
         bot.remove_webhook()
         bot.set_webhook(url=webhook_url)
+        
+        # Khởi động thread tự ping giữ bot thức 24/7 trên Render Free Tier
+        ping_thread = threading.Thread(target=keep_alive_ping, args=(f"{render_url}/health",))
+        ping_thread.daemon = True
+        ping_thread.start()
+        print(f"[*] Đã kích hoạt cơ chế giữ bot online 24/7 (Anti-Sleep)")
+        
         app.run(host='0.0.0.0', port=port)
     else:
         # Chạy local hoặc VPS qua Polling

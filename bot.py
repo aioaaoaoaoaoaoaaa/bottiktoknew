@@ -982,6 +982,9 @@ def send_welcome(message):
 @bot.message_handler(func=lambda message: not message.text.startswith('http') and not message.text.startswith('/'))
 def handle_password(message):
     """Xử lý password riêng theo ID Telegram để đăng nhập"""
+    # Chỉ xử lý mật khẩu trong chat riêng tư (tránh spam trong nhóm/kênh)
+    if message.chat.type != 'private':
+        return
     user_id = message.from_user.id
     password = message.text.strip()
     
@@ -1163,6 +1166,17 @@ def handle_message(message):
 
 
 
+def keep_alive_ping(url):
+    """Tự động gửi request ping đến /health mỗi 10 phút để Render không bị tắt (Sleep mode)"""
+    while True:
+        time.sleep(600)  # 10 phút
+        try:
+            requests.get(url, timeout=10)
+            print(f"[Keep-Alive] Ping thành công tới {url}")
+        except Exception as e:
+            print(f"[Keep-Alive] Lỗi ping: {e}")
+
+
 def test_tiktok_apis(raw_url):
     """Hàm kiểm tra chi tiết từng máy chủ API TikTok và thử tải file thực tế về máy"""
     raw_url = raw_url.strip()
@@ -1286,6 +1300,12 @@ if __name__ == "__main__":
         
         # Set webhook mới
         bot.set_webhook(url=webhook_url)
+        
+        # Khởi động thread tự ping giữ bot thức 24/7 trên Render Free Tier
+        ping_thread = threading.Thread(target=keep_alive_ping, args=(f"{render_url}/health",))
+        ping_thread.daemon = True
+        ping_thread.start()
+        print(f"[*] Đã kích hoạt cơ chế giữ bot online 24/7 (Anti-Sleep)")
         
         # Chạy Flask app (webhook sẽ tự xử lý)
         app.run(host='0.0.0.0', port=port)
