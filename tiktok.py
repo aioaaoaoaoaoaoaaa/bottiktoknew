@@ -794,6 +794,21 @@ def extract_media_url(text):
 # =======================================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+def clean_ai_response(text):
+    """
+    Lọc bỏ hoàn toàn các ký tự Markdown *, # theo yêu cầu của người dùng,
+    và chuẩn hóa các đề mục/gạch đầu dòng thành dấu gạch ngang '-'
+    """
+    if not text:
+        return text
+    # Đổi các tiêu đề Markdown '## ' hoặc '### ' thành '- '
+    text = re.sub(r'^#+\s*', '- ', text, flags=re.MULTILINE)
+    # Xóa sạch mọi ký tự # còn sót lại
+    text = text.replace('#', '')
+    # Xóa sạch mọi ký tự *
+    text = text.replace('*', '')
+    return text.strip()
+
 def call_groq_ai(user_query, history=None, user_name="bạn"):
     """
     Gọi API Groq để trả lời câu hỏi của người dùng với nhân vật AI Tày
@@ -808,11 +823,13 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
     }
     
     sys_content = (
-        "Tên của bạn là Tày - một trợ lý AI thông minh, vui vẻ và thân thiện trên Telegram. "
-        "Khi trò chuyện hoặc trả lời người dùng, bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày thấy...', 'Tày giúp bạn nhé', 'Tày là...') "
-        "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ". "
-        "Trả lời bằng tiếng Việt tự nhiên, dí dỏm, hữu ích, súc tích, định dạng rõ ràng (sử dụng in đậm, danh sách gạch đầu dòng, emoji phù hợp). "
-        "Không trả lời quá dài dòng trừ khi người dùng yêu cầu chi tiết."
+        "Tên của bạn là Tày - một người bạn AI thông minh, cực kỳ thân thiện, gần gũi và vui vẻ trên Telegram. "
+        "Quy tắc trả lời:\n"
+        "- Bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày nghĩ là...', 'Để Tày chỉ cho nhé') "
+        "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ".\n"
+        "- Trả lời thật ngắn gọn, súc tích, dễ hiểu, đi thẳng vào trọng tâm, câu từ tự nhiên và thân mật như bạn bè.\n"
+        "- TUYỆT ĐỐI KHÔNG dùng các ký tự Markdown như dấu sao * hoặc dấu thăng # (không viết *, **, #, ##, ###).\n"
+        "- Khi liệt kê các ý hoặc các bước, hãy bắt đầu mỗi dòng bằng dấu gạch ngang '-' để dễ nhìn."
     )
     
     messages = [
@@ -848,7 +865,7 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
                 data = res.json()
                 answer = data["choices"][0]["message"]["content"]
                 if answer and answer.strip():
-                    return answer.strip()
+                    return clean_ai_response(answer)
             else:
                 print(f"⚠️ Model {model_name} trả về mã {res.status_code} -> Tự động chuyển model tiếp theo...")
         except Exception as e:
@@ -1331,18 +1348,11 @@ def handle_ai_chat_message(message):
     for idx, chunk in enumerate(chunks):
         try:
             if idx == 0:
-                bot.reply_to(message, chunk, parse_mode="Markdown")
+                bot.reply_to(message, chunk)
             else:
-                bot.send_message(message.chat.id, chunk, parse_mode="Markdown")
-        except Exception:
-            # Fallback sang dạng text thông thường nếu Markdown của câu trả lời bị lỗi ký tự
-            try:
-                if idx == 0:
-                    bot.reply_to(message, chunk)
-                else:
-                    bot.send_message(message.chat.id, chunk)
-            except Exception as e:
-                print(f"Lỗi gửi tin nhắn AI: {e}")
+                bot.send_message(message.chat.id, chunk)
+        except Exception as e:
+            print(f"Lỗi gửi tin nhắn AI: {e}")
 
 
 @bot.message_handler(commands=['admin', 'panel'])
