@@ -901,9 +901,15 @@ def call_gemini_ai(user_query, sys_content, history=None):
         "systemInstruction": {
             "parts": [{"text": sys_content}]
         },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ],
         "generationConfig": {
             "temperature": 0.7,
-            "maxOutputTokens": 1500
+            "maxOutputTokens": 2048
         }
     }
     
