@@ -1151,7 +1151,7 @@ def handle_shorten_callback(call):
             f"🔗 <b>Link gốc:</b> {target_url}\n"
             f"🌐 <b>Host:</b> link999.{domain_choice}\n"
             f"👉 <b>Link rút gọn:</b> <code>{shortened_url}</code>\n\n"
-            f"👤 <b>Creator:</b> {creator_info}"
+            f"👤 : {creator_info}"
         )
         bot.edit_message_text(
             result_text,
