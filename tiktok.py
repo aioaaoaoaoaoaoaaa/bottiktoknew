@@ -8,6 +8,8 @@ import sys
 import json
 import uuid
 import base64
+import urllib.parse
+import xml.etree.ElementTree as ET
 
 # Cấu hình UTF-8 cho console Windows
 if sys.platform == 'win32':
@@ -794,6 +796,54 @@ def extract_media_url(text):
 # =======================================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+def search_realtime_web(query, max_items=4):
+    """
+    Tìm kiếm thông tin thời gian thực từ Google News RSS và Wikipedia (hoàn toàn miễn phí, cập nhật mới nhất)
+    """
+    if not query:
+        return ""
+    snippets = []
+    
+    # 1. Tra cứu Google News RSS (Tin tức mới nhất theo phút của Google)
+    try:
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=vi&gl=VN&ceid=VN:vi"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            root = ET.fromstring(res.content)
+            for item in root.findall(".//item")[:max_items]:
+                title = item.find("title").text if item.find("title") is not None else ""
+                pubDate = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                if title:
+                    snippets.append(f"- [Tin tức {pubDate[:16]}]: {title}")
+    except Exception:
+        pass
+
+    # 2. Nếu tin tức ít hơn 2 kết quả, tra cứu thêm Wikipedia
+    if len(snippets) < 2:
+        try:
+            wiki_url = "https://vi.wikipedia.org/w/api.php"
+            params = {
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "format": "json"
+            }
+            res_wiki = requests.get(wiki_url, params=params, headers={"User-Agent": "TelegramBot/1.0"}, timeout=3)
+            if res_wiki.status_code == 200:
+                data = res_wiki.json()
+                for w in data.get("query", {}).get("search", [])[:2]:
+                    w_title = w.get("title", "")
+                    w_snippet = re.sub(r'<[^>]+>', '', w.get("snippet", ""))
+                    if w_snippet:
+                        snippets.append(f"- [Bách khoa {w_title}]: {w_snippet}")
+        except Exception:
+            pass
+
+    return "\n".join(snippets)
+
 def clean_ai_response(text):
     """
     Lọc bỏ hoàn toàn các ký tự Markdown *, # theo yêu cầu của người dùng,
@@ -822,6 +872,15 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         "Content-Type": "application/json"
     }
     
+    # Tự động tra cứu thông tin thời gian thực từ Internet nếu có
+    web_info = search_realtime_web(user_query)
+    web_section = ""
+    if web_info:
+        web_section = (
+            "\n- Dưới đây là thông tin cập nhật thời gian thực từ Internet liên quan đến câu hỏi, "
+            "hãy ưu tiên sử dụng để cung cấp câu trả lời mới nhất, chính xác nhất:\n" + web_info
+        )
+
     sys_content = (
         "Tên của bạn là Tày - một người bạn AI thông minh, cực kỳ thân thiện, gần gũi và vui vẻ trên Telegram. "
         "Quy tắc trả lời:\n"
@@ -830,6 +889,7 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         "- Trả lời thật ngắn gọn, súc tích, dễ hiểu, đi thẳng vào trọng tâm, câu từ tự nhiên và thân mật như bạn bè.\n"
         "- TUYỆT ĐỐI KHÔNG dùng các ký tự Markdown như dấu sao * hoặc dấu thăng # (không viết *, **, #, ##, ###).\n"
         "- Khi liệt kê các ý hoặc các bước, hãy bắt đầu mỗi dòng bằng dấu gạch ngang '-' để dễ nhìn."
+        + web_section
     )
     
     messages = [
