@@ -58,7 +58,8 @@ NOTIFICATION_BLOCKLIST_FILE = "notification_blocklist.json"
 # =======================================================
 # HỆ THỐNG GIỚI HẠN SỬ DỤNG
 # =======================================================
-ADMIN_ID = 6762189023
+ADMIN_IDS = [8581799806, 8774243619, 6762189023]
+ADMIN_ID = 8581799806
 USAGE_FILE = "usage_data.json"
 DAILY_LIMIT = 5
 
@@ -245,7 +246,7 @@ def check_telegram_password(user_id, password):
 def is_user_authorized(user_id):
     """Kiểm tra xem user có quyền sử dụng bot TikTok không (chỉ check từ notification_credentials.json trong Gist)"""
     # Admin luôn có quyền
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         return True
     
     # Chỉ kiểm tra user có pass riêng trong notification_credentials.json
@@ -273,7 +274,7 @@ def is_user_authorized(user_id):
 def is_user_public(user_id):
     """Kiểm tra xem user có đang ở public mode không (user lạ tạm thời)"""
     # Admin không phải public user
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         return False
     
     # Nếu đã có quyền đầy đủ, không phải public user
@@ -291,7 +292,7 @@ def is_user_public(user_id):
 def is_user_blocked(user_id):
     """Kiểm tra xem user có bị block từ bot thông báo không"""
     # Admin không bao giờ bị block
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         return False
     
     # Đọc danh sách user bị block từ Gist
@@ -301,7 +302,7 @@ def is_user_blocked(user_id):
 def check_daily_limit(user_id, platform='tiktok'):
     """Kiểm tra user đã vượt giới hạn ngày chưa (phân biệt TikTok và Facebook)"""
     # Admin không bị giới hạn
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         return True, 0
     
     # Xác định giới hạn dựa trên quyền của user và nền tảng
@@ -354,7 +355,7 @@ def check_daily_limit(user_id, platform='tiktok'):
 
 def increment_usage(user_id, platform='tiktok'):
     """Tăng count sử dụng cho user (phân biệt TikTok và Facebook)"""
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         return
     
     user_id_str = str(user_id)

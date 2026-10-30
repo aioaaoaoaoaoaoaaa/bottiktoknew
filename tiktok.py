@@ -5,6 +5,7 @@ import threading
 import time
 import os
 import sys
+import json
 
 # Cấu hình UTF-8 cho console Windows
 if sys.platform == 'win32':
@@ -41,6 +42,134 @@ def webhook():
         bot.process_new_updates([update])
         return "OK", 200
     return "OK", 200
+
+
+# =======================================================
+# HỆ THỐNG QUẢN TRỊ VIÊN (ADMIN), NHẬT KÝ & KHÓA NGƯỜI DÙNG
+# =======================================================
+ADMIN_IDS = [8581799806, 8774243619]
+env_admins = os.getenv("ADMIN_IDS")
+if env_admins:
+    try:
+        ADMIN_IDS.extend([int(x.strip()) for x in env_admins.split(',') if x.strip()])
+        ADMIN_IDS = list(set(ADMIN_IDS))
+    except Exception:
+        pass
+
+BLOCKED_USERS_FILE = "blocked_users.json"
+HISTORY_LOGS_FILE = "download_history.json"
+MAX_HISTORY_ITEMS = 200
+
+def is_admin(user_id):
+    """Kiểm tra xem user_id có thuộc danh sách admin không"""
+    if not user_id:
+        return False
+    return user_id in ADMIN_IDS
+
+def load_blocked_users():
+    """Tải danh sách ID người dùng bị khóa"""
+    try:
+        if os.path.exists(BLOCKED_USERS_FILE):
+            with open(BLOCKED_USERS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[-] Lỗi đọc file blocked_users.json: {e}")
+    return {}
+
+def save_blocked_users(data):
+    """Lưu danh sách ID người dùng bị khóa"""
+    try:
+        with open(BLOCKED_USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[-] Lỗi lưu file blocked_users.json: {e}")
+
+def is_user_blocked(user_id):
+    """Kiểm tra xem người dùng có bị khóa quyền tải không"""
+    if not user_id:
+        return False
+    if is_admin(user_id):
+        return False
+    blocked = load_blocked_users()
+    return str(user_id) in blocked
+
+def block_user(user_id, reason="Chặn bởi Admin", admin_id=None):
+    """Khóa quyền tải của 1 ID Telegram"""
+    blocked = load_blocked_users()
+    from datetime import datetime, timezone, timedelta
+    tz_vn = timezone(timedelta(hours=7))
+    time_str = datetime.now(tz_vn).strftime("%H:%M:%S %d/%m/%Y")
+    
+    blocked[str(user_id)] = {
+        "user_id": user_id,
+        "reason": reason,
+        "blocked_at": time_str,
+        "blocked_by": admin_id
+    }
+    save_blocked_users(blocked)
+    return True
+
+def unblock_user(user_id):
+    """Mở khóa cho 1 ID Telegram"""
+    blocked = load_blocked_users()
+    if str(user_id) in blocked:
+        del blocked[str(user_id)]
+        save_blocked_users(blocked)
+        return True
+    return False
+
+def load_history_logs():
+    """Tải danh sách nhật ký tải video"""
+    try:
+        if os.path.exists(HISTORY_LOGS_FILE):
+            with open(HISTORY_LOGS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[-] Lỗi đọc file download_history.json: {e}")
+    return []
+
+def save_history_logs(logs):
+    """Lưu danh sách nhật ký tải video"""
+    try:
+        with open(HISTORY_LOGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[-] Lỗi lưu file download_history.json: {e}")
+
+def record_download_log(user, chat, raw_url, platform, server_name, success, error_msg=""):
+    """Ghi nhận chi tiết từng lượt tải video"""
+    from datetime import datetime, timezone, timedelta
+    tz_vn = timezone(timedelta(hours=7))
+    time_str = datetime.now(tz_vn).strftime("%H:%M:%S %d/%m/%Y")
+
+    user_id = user.id if user else "N/A"
+    user_name = (user.first_name if user else None) or "Người dùng"
+    if user and user.last_name:
+        user_name += f" {user.last_name}"
+    username = user.username if user else None
+
+    chat_id = chat.id if chat else "N/A"
+    chat_title = chat.title if (chat and chat.title) else "Chat riêng"
+
+    log_item = {
+        "time": time_str,
+        "user_id": user_id,
+        "user_name": user_name,
+        "username": username,
+        "chat_id": chat_id,
+        "chat_title": chat_title,
+        "platform": platform,
+        "url": raw_url,
+        "server": server_name,
+        "status": "Thành công" if success else "Thất bại",
+        "error": error_msg
+    }
+
+    logs = load_history_logs()
+    logs.insert(0, log_item)
+    if len(logs) > MAX_HISTORY_ITEMS:
+        logs = logs[:MAX_HISTORY_ITEMS]
+    save_history_logs(logs)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -610,8 +739,34 @@ def process_download_request(message, raw_url, platform):
     """
     Hàm xử lý tải video chung cho cả Chat riêng và Nhóm Chat (Group)
     """
-    # Thông báo tiến trình
+    user_id = message.from_user.id if message.from_user else None
     user_name = (message.from_user.first_name if message.from_user else None) or "bạn"
+
+    # Kiểm tra xem người dùng có bị Admin khóa quyền tải video không
+    if user_id and is_user_blocked(user_id):
+        try:
+            bot.delete_message(message.chat.id, message.message_id)
+        except Exception:
+            pass
+        blocked_data = load_blocked_users().get(str(user_id), {})
+        reason = blocked_data.get("reason", "Chặn bởi Admin")
+        bot.send_message(
+            message.chat.id,
+            f"🚫 <b>{user_name}</b> (ID: <code>{user_id}</code>), bạn đã bị Admin chặn quyền tải video!\n📝 <i>Lý do: {reason}</i>",
+            parse_mode="HTML"
+        )
+        record_download_log(
+            user=message.from_user,
+            chat=message.chat,
+            raw_url=raw_url,
+            platform=platform,
+            server_name="Bị chặn bởi Admin",
+            success=False,
+            error_msg=f"User bị khóa: {reason}"
+        )
+        return
+
+    # Thông báo tiến trình
     status_msg = bot.send_message(
         message.chat.id, 
         f"⏳ Đang xử lý video cho {user_name}...\nTiến trình: 0%"
@@ -663,6 +818,7 @@ def process_download_request(message, raw_url, platform):
         ]
 
     video_link, caption = None, None
+    successful_server = None
 
     # Cơ chế xoay tua (Fallback)
     for server in api_servers:
@@ -670,6 +826,7 @@ def process_download_request(message, raw_url, platform):
         print(f"[*] Group {message.chat.id} | User {uid} -> Thử qua: {server['name']}...")
         video_link, caption = server["func"](raw_url)
         if video_link:
+            successful_server = server["name"]
             print(f"[+] Thành công tại {server['name']}.")
             break
         print(f"[-] {server['name']} thất bại, thử tiếp...")
@@ -695,6 +852,15 @@ def process_download_request(message, raw_url, platform):
                     video=video_link,
                     caption=caption if caption else "🎬 Video đã được tải thành công!"
                 )
+            # Ghi nhận nhật ký tải thành công
+            record_download_log(
+                user=message.from_user,
+                chat=message.chat,
+                raw_url=raw_url,
+                platform=platform,
+                server_name=successful_server,
+                success=True
+            )
             # Xóa tin nhắn trạng thái cho nhóm đỡ loãng
             bot.delete_message(message.chat.id, status_msg.message_id)
             print(f"[+] Đã gửi video thành công vào group {message.chat.id}!")
@@ -706,11 +872,273 @@ def process_download_request(message, raw_url, platform):
                 message_id=status_msg.message_id
             )
     else:
+        record_download_log(
+            user=message.from_user,
+            chat=message.chat,
+            raw_url=raw_url,
+            platform=platform,
+            server_name="Tất cả máy chủ thất bại",
+            success=False,
+            error_msg="Không máy chủ nào bóc được link"
+        )
         bot.edit_message_text(
             "💥 Không thể lấy được video từ link này (máy chủ bận hoặc link riêng tư/không hỗ trợ). Vui lòng thử lại sau!",
             chat_id=message.chat.id,
             message_id=status_msg.message_id
         )
+
+
+
+# =======================================================
+# BỘ LỆNH ĐIỀU KHIỂN DÀNH CHO ADMIN
+# =======================================================
+
+@bot.message_handler(commands=['admin', 'panel'])
+def handle_admin_panel(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    help_admin = (
+        "👑 <b>BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN (ADMIN)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📋 <b>XEM NHẬT KÝ & LỊCH SỬ TẢI:</b>\n"
+        "• <code>/history</code> hoặc <code>/log</code> : Xem 5 lượt tải gần nhất\n"
+        "• <code>/history [số]</code> : Xem số lượt tải tùy chọn (VD: <code>/history 15</code>)\n"
+        "• <code>/history user [id]</code> : Xem lịch sử của 1 người (VD: <code>/history user 8581799806</code>)\n\n"
+        "🚫 <b>QUẢN LÝ CHẶN / MỞ KHÓA NGƯỜI DÙNG:</b>\n"
+        "• <code>/block [id] [lý do]</code> : Khóa quyền tải video của ID đó\n"
+        "  <i>(Hoặc reply tin nhắn bất kỳ của người đó rồi gõ /block)</i>\n"
+        "• <code>/unblock [id]</code> : Mở khóa cho ID đó\n"
+        "• <code>/blocklist</code> : Xem danh sách người dùng đang bị khóa\n\n"
+        "📊 <b>THỐNG KÊ HOẠT ĐỘNG:</b>\n"
+        "• <code>/stats</code> hoặc <code>/thongke</code> : Thống kê tổng quan lượt tải & các máy chủ API"
+    )
+    bot.reply_to(message, help_admin, parse_mode="HTML")
+
+
+@bot.message_handler(commands=['history', 'log', 'logs', 'lichsu'])
+def handle_admin_history(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    text = message.text.strip()
+    parts = text.split()
+    
+    limit = 5
+    filter_user_id = None
+    
+    if len(parts) >= 3 and parts[1].lower() in ['user', 'u']:
+        try:
+            filter_user_id = int(parts[2])
+        except ValueError:
+            bot.reply_to(message, "❌ ID không hợp lệ. Ví dụ: <code>/history user 123456789</code>", parse_mode="HTML")
+            return
+        limit = 10
+    elif len(parts) >= 2:
+        arg = parts[1]
+        try:
+            val = int(arg)
+            if val > 100000:
+                filter_user_id = val
+                limit = 10
+            else:
+                limit = min(val, 20)
+        except ValueError:
+            pass
+
+    logs = load_history_logs()
+    if filter_user_id:
+        logs = [x for x in logs if str(x.get("user_id")) == str(filter_user_id)]
+
+    if not logs:
+        msg = f"📭 Chưa có nhật ký nào" + (f" cho user ID: <code>{filter_user_id}</code>." if filter_user_id else ".")
+        bot.reply_to(message, msg, parse_mode="HTML")
+        return
+
+    target_logs = logs[:limit]
+    total_found = len(logs)
+    
+    title = f"📜 <b>NHẬT KÝ TẢI VIDEO ({len(target_logs)}/{total_found} lượt):</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    items_text = []
+
+    for idx, item in enumerate(target_logs, 1):
+        status_icon = "✅" if item.get("status") == "Thành công" else "❌"
+        u_info = f"{item.get('user_name')} (ID: <code>{item.get('user_id')}</code>)"
+        if item.get("username"):
+            u_info += f" [@{item.get('username')}]"
+            
+        chat_info = f"{item.get('chat_title')} (ID: <code>{item.get('chat_id')}</code>)"
+        url_short = item.get('url', '')
+        if len(url_short) > 42:
+            url_short = url_short[:39] + "..."
+
+        block = (
+            f"<b>{idx}. {status_icon} [{item.get('time')}]</b>\n"
+            f"👤 <b>Người tải:</b> {u_info}\n"
+            f"🏠 <b>Nhóm chat:</b> {chat_info}\n"
+            f"⚙️ <b>Server API:</b> <code>{item.get('server')}</code>\n"
+            f"🔗 <b>Link:</b> {url_short}\n"
+            f"📊 <b>Trạng thái:</b> <b>{item.get('status')}</b>"
+        )
+        if item.get("error"):
+            block += f"\n⚠️ <i>Lỗi: {item.get('error')}</i>"
+        items_text.append(block)
+
+    full_response = title + "\n\n────────────────\n\n".join(items_text)
+    if len(full_response) > 4000:
+        bot.reply_to(message, full_response[:4000], parse_mode="HTML")
+    else:
+        bot.reply_to(message, full_response, parse_mode="HTML")
+
+
+@bot.message_handler(commands=['block', 'khoa', 'ban'])
+def handle_admin_block(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    target_id = None
+    reason = "Chặn bởi Admin"
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+        parts = message.text.split(maxsplit=1)
+        if len(parts) > 1:
+            reason = parts[1]
+    else:
+        parts = message.text.split(maxsplit=2)
+        if len(parts) > 1:
+            try:
+                target_id = int(parts[1])
+                if len(parts) > 2:
+                    reason = parts[2]
+            except ValueError:
+                bot.reply_to(message, "❌ ID không hợp lệ. Cú pháp: <code>/block [id] [lý do]</code>", parse_mode="HTML")
+                return
+
+    if not target_id:
+        bot.reply_to(
+            message,
+            "⚠️ <b>Cú pháp lệnh chặn:</b>\n"
+            "• Gõ: <code>/block [id_người_dùng] [lý do]</code>\n"
+            "• Hoặc reply tin nhắn của người đó rồi gõ: <code>/block [lý do]</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    if is_admin(target_id):
+        bot.reply_to(message, "⚠️ Không thể khóa tài khoản của Quản trị viên (Admin)!", parse_mode="HTML")
+        return
+
+    block_user(target_id, reason, admin_id=user_id)
+    bot.reply_to(
+        message,
+        f"🚫 <b>ĐÃ KHÓA NGƯỜI DÙNG THÀNH CÔNG!</b>\n"
+        f"• <b>ID Telegram:</b> <code>{target_id}</code>\n"
+        f"• <b>Lý do:</b> {reason}\n\n"
+        f"<i>Người này từ bây giờ sẽ bị chặn, không thể tải video được nữa.</i>",
+        parse_mode="HTML"
+    )
+
+
+@bot.message_handler(commands=['unblock', 'mokhoa', 'unban'])
+def handle_admin_unblock(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    target_id = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+    else:
+        parts = message.text.split()
+        if len(parts) > 1:
+            try:
+                target_id = int(parts[1])
+            except ValueError:
+                bot.reply_to(message, "❌ ID không hợp lệ. Cú pháp: <code>/unblock [id]</code>", parse_mode="HTML")
+                return
+
+    if not target_id:
+        bot.reply_to(message, "⚠️ Cú pháp: <code>/unblock [id]</code> hoặc reply tin nhắn gõ <code>/unblock</code>", parse_mode="HTML")
+        return
+
+    if unblock_user(target_id):
+        bot.reply_to(message, f"✅ <b>ĐÃ MỞ KHÓA THÀNH CÔNG!</b>\nNgười dùng <code>{target_id}</code> đã có thể tiếp tục tải video.", parse_mode="HTML")
+    else:
+        bot.reply_to(message, f"ℹ️ Người dùng <code>{target_id}</code> hiện không có trong danh sách bị khóa.", parse_mode="HTML")
+
+
+@bot.message_handler(commands=['blocklist', 'dskhoa', 'listblock'])
+def handle_admin_blocklist(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    blocked = load_blocked_users()
+    if not blocked:
+        bot.reply_to(message, "✅ <b>Hiện tại không có ID người dùng nào bị khóa!</b>", parse_mode="HTML")
+        return
+
+    res = [f"🚫 <b>DANH SÁCH NGƯỜI DÙNG BỊ KHÓA ({len(blocked)} người):</b>\n━━━━━━━━━━━━━━━━━━━━━━\n"]
+    for idx, (uid, info) in enumerate(blocked.items(), 1):
+        res.append(
+            f"<b>{idx}. ID:</b> <code>{uid}</code>\n"
+            f"   ⏰ Thời gian: {info.get('blocked_at', 'N/A')}\n"
+            f"   📝 Lý do: {info.get('reason', 'N/A')}\n"
+            f"   👮 Người khóa: <code>{info.get('blocked_by', 'Admin')}</code>"
+        )
+
+    bot.reply_to(message, "\n\n".join(res), parse_mode="HTML")
+
+
+@bot.message_handler(commands=['stats', 'thongke'])
+def handle_admin_stats(message):
+    user_id = message.from_user.id if message.from_user else None
+    if not is_admin(user_id):
+        bot.reply_to(message, "⛔ <b>Lệnh này chỉ dành riêng cho Admin!</b>", parse_mode="HTML")
+        return
+
+    logs = load_history_logs()
+    blocked = load_blocked_users()
+    
+    total_reqs = len(logs)
+    success_reqs = sum(1 for x in logs if x.get("status") == "Thành công")
+    fail_reqs = total_reqs - success_reqs
+    rate = (success_reqs / total_reqs * 100) if total_reqs > 0 else 0
+
+    server_counts = {}
+    user_counts = {}
+    for item in logs:
+        srv = item.get("server", "Khác")
+        server_counts[srv] = server_counts.get(srv, 0) + 1
+        
+        uid = str(item.get("user_id"))
+        user_counts[uid] = user_counts.get(uid, 0) + 1
+
+    srv_text = []
+    for srv, cnt in sorted(server_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+        srv_text.append(f"• <code>{srv}</code>: <b>{cnt}</b> lượt")
+
+    stats_msg = (
+        "📊 <b>THỐNG KÊ HOẠT ĐỘNG BOT TIKTOK</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🔢 <b>Tổng số yêu cầu đã ghi nhận:</b> {total_reqs}\n"
+        f"✅ <b>Thành công:</b> {success_reqs} ({rate:.1f}%)\n"
+        f"❌ <b>Thất bại:</b> {fail_reqs}\n"
+        f"👥 <b>Số người dùng đã tương tác:</b> {len(user_counts)}\n"
+        f"🚫 <b>Số người dùng đang bị khóa:</b> {len(blocked)}\n\n"
+        "⚙️ <b>TẦN SUẤT SỬ DỤNG CÁC MÁY CHỦ API:</b>\n" +
+        ("\n".join(srv_text) if srv_text else "Chưa có dữ liệu")
+    )
+    bot.reply_to(message, stats_msg, parse_mode="HTML")
 
 
 def keep_alive_ping(url):
