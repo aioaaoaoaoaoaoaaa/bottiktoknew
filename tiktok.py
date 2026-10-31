@@ -1039,6 +1039,17 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
 
 consecutive_message_counts = {}
 consecutive_message_lock = threading.Lock()
+EXCLUDED_FORWARD_CHANNEL_ID = -1004419177767
+
+def is_forwarded_from_excluded_channel(message):
+    """Kiểm tra tin nhắn được chuyển tiếp từ kênh không tính spam."""
+    forward_chat = getattr(message, "forward_from_chat", None)
+    if forward_chat and getattr(forward_chat, "id", None) == EXCLUDED_FORWARD_CHANNEL_ID:
+        return True
+
+    forward_origin = getattr(message, "forward_origin", None)
+    origin_chat = getattr(forward_origin, "chat", None)
+    return bool(origin_chat and getattr(origin_chat, "id", None) == EXCLUDED_FORWARD_CHANNEL_ID)
 spam_warning_messages = [
     "Bạn cứ bình tĩnh, có gì Tày sẽ giúp.",
     "Từ từ thôi bạn nhé, Tày vẫn đang lắng nghe đây.",
@@ -1078,6 +1089,8 @@ def monitor_consecutive_messages(message, bot):
     if message.chat.type not in ('group', 'supergroup'):
         return telebot.ContinueHandling()
     if not message.from_user or message.from_user.is_bot:
+        return telebot.ContinueHandling()
+    if is_forwarded_from_excluded_channel(message):
         return telebot.ContinueHandling()
 
     chat_id = message.chat.id
