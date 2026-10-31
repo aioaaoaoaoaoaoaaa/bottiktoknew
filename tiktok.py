@@ -225,7 +225,7 @@ def call_api_tikwm_direct(tiktok_url):
                 if play_url:
                     if not play_url.startswith("http"):
                         play_url = "https://www.tikwm.com" + play_url
-                    caption = data.get("title") or "Video tải từ TikWM Siêu Tốc ⚡"
+                    caption = data.get("title") or ""
                     print("[+] TikWM bóc link HD thành công!")
                     return play_url, caption
     except Exception as e:
@@ -282,7 +282,7 @@ def call_api_2_social_media(tiktok_url):
                 if videos:
                     video_url = videos[0].get('url')
                     print("[+] API 2 bóc link thành công!")
-                    return video_url, "Video tải từ Máy chủ dự phòng 2 🚀"
+                    return video_url, ""
     except Exception as e:
         print(f"[-] API 2 gặp sự cố: {e}")
     return None, None
@@ -304,7 +304,7 @@ def call_api_3_tiktok_api23(tiktok_url):
             video_url = res_json.get('play') 
             if video_url:
                 print("[+] API 3 bóc link thành công!")
-                return video_url, "Video tải từ Máy chủ dự phòng 3 💎"
+                return video_url, ""
     except Exception as e:
         print(f"[-] API 3 gặp sự cố: {e}")
     return None, None
@@ -325,7 +325,7 @@ def call_api_4_no_watermark2(tiktok_url):
             res_json = response.json()
             data_block = res_json.get('data', {})
             video_url = data_block.get('hdplay') or data_block.get('play')
-            caption = data_block.get('title') or "Video tải từ Máy chủ dự phòng 4 🔥"
+            caption = data_block.get('title') or ""
             if video_url:
                 print("[+] API 4 bóc link không logo thành công!")
                 return video_url, caption
@@ -357,7 +357,7 @@ def call_api_5_7scorp(tiktok_url):
             elif isinstance(video_url, str):
                 video_url = video_url.strip()
 
-            caption = res_json.get('title') or res_json.get('desc') or "Video tải từ Máy chủ dự phòng 5 ✨"
+            caption = res_json.get('title') or res_json.get('desc') or ""
             
             if video_url:
                 print("[+] API 5 (7scorp) bóc link thành công!")
@@ -387,7 +387,7 @@ def call_fb_api_mahmudul(fb_url):
             data_block = res_json.get('data', {})
             video_info = data_block.get('video', {})
             download_block = data_block.get('download', {})
-            caption = video_info.get('title') or "Video tải từ Facebook Server 🎬"
+            caption = video_info.get('title') or ""
             
             hd_block = download_block.get('hd', {})
             sd_block = download_block.get('sd', {})
@@ -415,7 +415,7 @@ def call_fb_api_full_downloader(fb_url):
         if response.status_code == 200:
             res_json = response.json()
             video_url = res_json.get('download_url')
-            caption = res_json.get('caption') or "Video tải từ Facebook Server 2 🚀"
+            caption = res_json.get('caption') or ""
             if video_url:
                 print("[+] FB API 2 (Full Downloader) bóc link thành công!")
                 return video_url, caption
@@ -445,7 +445,7 @@ def call_fb_api_social_media_v3(fb_url):
                 videos = contents[0].get('videos', [])
                 if videos:
                     video_url = videos[0].get('url')
-                    return video_url, "Video tải từ Facebook Server 3 💎"
+                    return video_url, ""
     except Exception as e:
         print(f"[-] FB API 3 gặp sự cố: {e}")
     return None, None
@@ -466,7 +466,7 @@ def call_fb_api_social_download_all_in_one(fb_url):
         if response.status_code == 200:
             res_json = response.json()
             video_url = res_json.get('url') or res_json.get('download_url') or res_json.get('links', [{}])[0].get('url')
-            caption = res_json.get('title') or "Video tải từ Facebook Server 4 💎"
+            caption = res_json.get('title') or ""
             if video_url:
                 print("[+] FB API 4 (All In One POST) bóc link thành công!")
                 return video_url, caption
@@ -493,7 +493,7 @@ def call_fb_api_media_download_url(fb_url):
         if response.status_code == 200:
             res_json = response.json()
             video_url = res_json.get('url') or res_json.get('download_url') or res_json.get('data', {}).get('url')
-            caption = res_json.get('title') or "Video tải từ Facebook Server 5 💎"
+            caption = res_json.get('title') or ""
             if video_url:
                 print("[+] FB API 5 (Media API) bóc link thành công!")
                 return video_url, caption
@@ -536,7 +536,7 @@ def call_yt_api_datafanatic_details(yt_url):
         response = requests.get(url, headers=headers, params=querystring, timeout=10)
         if response.status_code == 200:
             res_json = response.json()
-            caption = res_json.get('title') or "Video tải từ YouTube Server 1 🎥"
+            caption = res_json.get('title') or ""
             videos_block = res_json.get('videos', {})
             items = videos_block.get('items', [])
             video_url = None
@@ -585,7 +585,7 @@ def call_yt_api_fast_downloader_v2(yt_url):
         if response.status_code == 200:
             res_json = response.json()
             video_url = res_json.get('url') or res_json.get('download_url') or res_json.get('video_url')
-            caption = res_json.get('title') or "Video tải từ YouTube FAST Server ⚡"
+            caption = res_json.get('title') or ""
             if video_url:
                 print("[+] YT API 2 (FAST Downloader) bóc link thành công!")
                 return video_url, caption
@@ -629,7 +629,7 @@ def call_yt_api_shorts_downloader_v3(yt_url):
                     if not video_url:
                         video_url = videos[0].get('url')
                     
-                    caption = contents[0].get('title') or "Video tải từ YouTube Server 3 💎"
+                    caption = contents[0].get('title') or ""
                     print("[+] YT API 3 (Shorts Downloader) bóc link thành công!")
                     return video_url, caption
     except Exception as e:
