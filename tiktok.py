@@ -1065,6 +1065,16 @@ def monitor_consecutive_messages(message, bot):
 
     if should_notify:
         try:
+            bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                until_date=int(time.time()) + 30,
+                can_send_messages=False
+            )
+        except Exception as e:
+            print(f"Lỗi hạn chế thành viên 30 giây: {e}")
+
+        try:
             bot.send_message(
                 chat_id,
                 "Bạn cứ bình tĩnh, có gì Tày sẽ giúp"
