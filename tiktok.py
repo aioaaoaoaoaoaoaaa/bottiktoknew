@@ -1069,7 +1069,14 @@ def monitor_consecutive_messages(message, bot):
                 chat_id=chat_id,
                 user_id=user_id,
                 until_date=int(time.time()) + 30,
-                can_send_messages=False
+                permissions=telebot.types.ChatPermissions(
+                    can_send_messages=False,
+                    can_send_media_messages=False,
+                    can_send_polls=False,
+                    can_send_other_messages=False,
+                    can_add_web_page_previews=False
+                ),
+                use_independent_chat_permissions=True
             )
         except Exception as e:
             print(f"Lỗi hạn chế thành viên 30 giây: {e}")
