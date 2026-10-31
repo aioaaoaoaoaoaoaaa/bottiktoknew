@@ -1036,6 +1036,42 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
 # 6. GIAO DIỆN LỆNH & XỬ LÝ TRONG NHÓM CHAT (GROUP & PRIVATE)
 # =======================================================
 
+consecutive_message_counts = {}
+consecutive_message_lock = threading.Lock()
+
+@bot.message_handler(func=lambda msg: True, pass_bot=True)
+def monitor_consecutive_messages(message, bot_instance):
+    """Nhắc thành viên bình tĩnh sau 5 tin nhắn liên tiếp trong nhóm."""
+    if message.chat.type not in ('group', 'supergroup'):
+        return
+    if not message.from_user or message.from_user.is_bot:
+        return
+
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    should_notify = False
+
+    with consecutive_message_lock:
+        state = consecutive_message_counts.get(chat_id)
+        if state and state.get("user_id") == user_id:
+            state["count"] += 1
+        else:
+            state = {"user_id": user_id, "count": 1}
+            consecutive_message_counts[chat_id] = state
+
+        if state["count"] >= 5:
+            should_notify = True
+            consecutive_message_counts.pop(chat_id, None)
+
+    if should_notify:
+        try:
+            bot_instance.send_message(
+                chat_id,
+                "Bạn cứ bình tĩnh, có gì Tày sẽ giúp"
+            )
+        except Exception as e:
+            print(f"Lỗi gửi thông báo nhắc nhở: {e}")
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     help_text = (
