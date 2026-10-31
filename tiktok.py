@@ -1,4 +1,5 @@
 import re
+import random
 import requests
 import telebot
 import threading
@@ -1038,6 +1039,38 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
 
 consecutive_message_counts = {}
 consecutive_message_lock = threading.Lock()
+spam_warning_messages = [
+    "Bạn cứ bình tĩnh, có gì Tày sẽ giúp.",
+    "Từ từ thôi bạn nhé, Tày vẫn đang lắng nghe đây.",
+    "Bạn nhắn nhanh quá rồi, nghỉ một chút cho nhẹ tay nhé.",
+    "Bình tĩnh nào bạn, Tày xử lý được mà.",
+    "Khoan gửi thêm nhé, Tày sắp hỗ trợ bạn rồi.",
+    "Bạn cho Tày vài giây suy nghĩ với nhé.",
+    "Nhắn chậm lại một chút nha, Tày không bỏ sót bạn đâu.",
+    "Tày thấy bạn đang rất cần hỗ trợ, mình bình tĩnh nhé.",
+    "Một chút kiên nhẫn nhé bạn, Tày đang ở đây.",
+    "Bạn đừng lo, Tày sẽ giúp ngay khi có thể.",
+    "Từ tốn thôi bạn ơi, tin nhắn của bạn đã được ghi nhận.",
+    "Bạn nghỉ tay 30 giây nhé, rồi Tày hỗ trợ tiếp.",
+    "Đừng gửi dồn dập quá nhé, Tày đang theo kịp đây.",
+    "Bình tĩnh bạn nhé, mọi việc vẫn ổn.",
+    "Tày nghe thấy rồi, bạn chờ một chút nha.",
+    "Bạn gửi liên tục quá rồi, để Tày xử lý nhé.",
+    "Chậm lại một nhịp nhé bạn, Tày sẽ không quên đâu.",
+    "Tày đang cố giúp bạn, mình kiên nhẫn thêm chút nhé.",
+    "Bạn cứ bình tĩnh, gửi từng tin một thôi nha.",
+    "Nghỉ một lát nhé bạn, Tày sẽ quay lại hỗ trợ ngay.",
+    "Đợi Tày một chút nhé, đừng gửi dồn thêm nữa.",
+    "Bạn đang nhắn hơi nhanh rồi, bình tĩnh nào.",
+    "Tày đã nhận được yêu cầu, bạn chờ một chút nhé.",
+    "Mình chậm lại một chút để Tày hỗ trợ chính xác hơn nha.",
+    "Không cần vội đâu bạn, Tày vẫn đang theo dõi.",
+    "Bạn kiên nhẫn giúp Tày một chút nhé.",
+    "Tin nhắn nhiều quá rồi, mình tạm dừng một lát nha.",
+    "Tày ở đây mà, bạn không cần gửi liên tục đâu.",
+    "Bình tĩnh nhé bạn, Tày sẽ hỗ trợ bạn sớm thôi.",
+    "Bạn cho Tày một khoảng nghỉ ngắn nhé, rồi mình tiếp tục."
+]
 
 @bot.message_handler(func=lambda msg: True, pass_bot=True)
 def monitor_consecutive_messages(message, bot):
@@ -1084,7 +1117,7 @@ def monitor_consecutive_messages(message, bot):
         try:
             bot.send_message(
                 chat_id,
-                "Bạn cứ bình tĩnh, có gì Tày sẽ giúp"
+                random.choice(spam_warning_messages)
             )
         except Exception as e:
             print(f"Lỗi gửi thông báo nhắc nhở: {e}")
