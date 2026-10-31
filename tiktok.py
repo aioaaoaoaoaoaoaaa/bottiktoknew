@@ -1074,7 +1074,7 @@ spam_warning_messages = [
 
 @bot.message_handler(func=lambda msg: True, pass_bot=True)
 def monitor_consecutive_messages(message, bot):
-    """Nhắc thành viên bình tĩnh sau 5 tin nhắn liên tiếp trong nhóm."""
+    """Nhắc thành viên bình tĩnh sau 4 tin nhắn liên tiếp trong nhóm."""
     if message.chat.type not in ('group', 'supergroup'):
         return telebot.ContinueHandling()
     if not message.from_user or message.from_user.is_bot:
@@ -1092,7 +1092,7 @@ def monitor_consecutive_messages(message, bot):
             state = {"user_id": user_id, "count": 1}
             consecutive_message_counts[chat_id] = state
 
-        if state["count"] >= 5:
+        if state["count"] >= 4:
             should_notify = True
             consecutive_message_counts.pop(chat_id, None)
 
