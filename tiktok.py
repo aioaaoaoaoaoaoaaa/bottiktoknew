@@ -1205,19 +1205,18 @@ def process_download_request(message, raw_url, platform):
             bot.edit_message_text("Đợi xíu video sẽ hiện sau ít giây", chat_id=message.chat.id, message_id=status_msg.message_id)
             
             # Gửi video thành phẩm
-            final_caption = f"🎬 <b>Video cho {user_name}:</b>\n\n{caption}" if caption else f"🎬 <b>Video cho {user_name}</b>"
+            final_caption = f"{caption}\n\n{user_name}" if caption else user_name
             try:
                 bot.send_video(
                     chat_id=message.chat.id,
                     video=video_link,
                     caption=final_caption,
-                    parse_mode="HTML"
                 )
             except Exception:
                 bot.send_video(
                     chat_id=message.chat.id,
                     video=video_link,
-                    caption=caption if caption else "🎬 Video đã được tải thành công!"
+                    caption=final_caption
                 )
             # Ghi nhận nhật ký tải thành công
             record_download_log(
