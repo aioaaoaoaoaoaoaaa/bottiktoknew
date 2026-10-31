@@ -1040,12 +1040,12 @@ consecutive_message_counts = {}
 consecutive_message_lock = threading.Lock()
 
 @bot.message_handler(func=lambda msg: True, pass_bot=True)
-def monitor_consecutive_messages(message, bot_instance):
+def monitor_consecutive_messages(message, bot):
     """Nhắc thành viên bình tĩnh sau 5 tin nhắn liên tiếp trong nhóm."""
     if message.chat.type not in ('group', 'supergroup'):
-        return
+        return telebot.ContinueHandling()
     if not message.from_user or message.from_user.is_bot:
-        return
+        return telebot.ContinueHandling()
 
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -1065,12 +1065,13 @@ def monitor_consecutive_messages(message, bot_instance):
 
     if should_notify:
         try:
-            bot_instance.send_message(
+            bot.send_message(
                 chat_id,
                 "Bạn cứ bình tĩnh, có gì Tày sẽ giúp"
             )
         except Exception as e:
             print(f"Lỗi gửi thông báo nhắc nhở: {e}")
+    return telebot.ContinueHandling()
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
