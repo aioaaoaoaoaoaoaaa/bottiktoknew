@@ -1387,10 +1387,17 @@ def process_download_request(message, raw_url, platform):
                 chat_id=message.chat.id,
                 message_id=status_msg.message_id
             )
-            delete_error_timer = threading.Timer(
-                2,
-                lambda: bot.delete_message(message.chat.id, status_msg.message_id)
-            )
+            def delete_error_and_return_url():
+                try:
+                    bot.delete_message(message.chat.id, status_msg.message_id)
+                except Exception as delete_error:
+                    print(f"Lỗi tự xóa thông báo gửi video: {delete_error}")
+                try:
+                    bot.send_message(message.chat.id, raw_url)
+                except Exception as url_error:
+                    print(f"Lỗi gửi lại URL video: {url_error}")
+
+            delete_error_timer = threading.Timer(2, delete_error_and_return_url)
             delete_error_timer.daemon = True
             delete_error_timer.start()
     else:
