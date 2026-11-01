@@ -801,7 +801,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 AI_MEMORY_DB = "ai_memory.sqlite3"
-AI_MEMORY_LIMIT = 20
+AI_MEMORY_LIMIT = 50
 
 def init_ai_memory():
     """Khởi tạo kho lịch sử hội thoại AI bằng SQLite."""
@@ -818,36 +818,26 @@ def init_ai_memory():
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_memory ON ai_messages(chat_id, user_id, id)")
 
-def load_ai_memory(chat_id, user_id):
-    """Lấy tối đa 20 tin nhắn gần nhất của user trong chat hiện tại."""
+def load_ai_memory():
+    """Lấy tối đa 50 tin nhắn gần nhất dùng chung cho toàn bộ bot."""
     with sqlite3.connect(AI_MEMORY_DB) as conn:
-        rows = conn.execute(
-            """SELECT role, content FROM ai_messages
-               WHERE chat_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?""",
-            (str(chat_id), str(user_id), AI_MEMORY_LIMIT)
-        ).fetchall()
+        rows = conn.execute("SELECT role, content FROM ai_messages ORDER BY id DESC LIMIT ?", (AI_MEMORY_LIMIT,)).fetchall()
     return [{"role": role, "content": content} for role, content in reversed(rows)]
 
-def save_ai_exchange(chat_id, user_id, user_query, assistant_reply):
-    """Lưu lượt hỏi/trả lời và giữ lại 20 tin gần nhất."""
+def save_ai_exchange(user_query, assistant_reply, chat_id=None, user_id=None):
+    """Lưu lượt hỏi/trả lời vào bộ nhớ chung và giữ 50 tin gần nhất."""
     with sqlite3.connect(AI_MEMORY_DB) as conn:
         conn.executemany(
             "INSERT INTO ai_messages(chat_id, user_id, role, content) VALUES (?, ?, ?, ?)",
-            [(str(chat_id), str(user_id), "user", user_query),
-             (str(chat_id), str(user_id), "assistant", assistant_reply)]
+            [(str(chat_id or "global"), str(user_id or "global"), "user", user_query),
+             (str(chat_id or "global"), str(user_id or "global"), "assistant", assistant_reply)]
         )
-        conn.execute(
-            """DELETE FROM ai_messages WHERE chat_id = ? AND user_id = ?
-               AND id NOT IN (SELECT id FROM ai_messages
-                              WHERE chat_id = ? AND user_id = ?
-                              ORDER BY id DESC LIMIT ?)""",
-            (str(chat_id), str(user_id), str(chat_id), str(user_id), AI_MEMORY_LIMIT)
-        )
+        conn.execute("DELETE FROM ai_messages WHERE id NOT IN (SELECT id FROM ai_messages ORDER BY id DESC LIMIT ?)", (AI_MEMORY_LIMIT,))
 
-def clear_ai_memory(chat_id, user_id):
-    """Xóa lịch sử AI của user trong chat hiện tại."""
+def clear_ai_memory():
+    """Xóa toàn bộ lịch sử AI dùng chung."""
     with sqlite3.connect(AI_MEMORY_DB) as conn:
-        conn.execute("DELETE FROM ai_messages WHERE chat_id = ? AND user_id = ?", (str(chat_id), str(user_id)))
+        conn.execute("DELETE FROM ai_messages")
 
 init_ai_memory()
 
@@ -1622,30 +1612,22 @@ def is_ai_trigger_message(msg):
 
 @bot.message_handler(commands=['clear', 'reset'])
 def handle_ai_memory_clear(message):
-    """Xóa lịch sử hội thoại AI của user trong chat hiện tại."""
+    """Xóa toàn bộ lịch sử hội thoại AI dùng chung."""
     if not message.from_user:
         return
-    clear_ai_memory(message.chat.id, message.from_user.id)
-    bot.reply_to(message, "🧹 Tày đã xóa lịch sử trò chuyện của bạn trong chat này.")
+    clear_ai_memory()
+    bot.reply_to(message, "🧹 Tày đã xóa toàn bộ lịch sử trò chuyện AI dùng chung.")
 
 @bot.message_handler(func=is_ai_trigger_message)
 def handle_ai_chat_message(message):
-    """
-    Xử lý khi thành viên gọi AI:
-    - Bắt đầu bằng dấu chấm: .câu hỏi
-    - Kết thúc bằng đúng 1 dấu chấm: câu hỏi.
-    - Dùng lệnh /ai, /gpt hoặc chat riêng
-    """
+    """Xử lý câu hỏi AI và dùng bộ nhớ hội thoại chung."""
     user_id = message.from_user.id if message.from_user else None
     user_name = (message.from_user.first_name if message.from_user else None) or "Người dùng"
 
-    # Kiểm tra người dùng có bị khóa không
     if user_id and is_user_blocked(user_id):
         return
 
     raw_text = message.text.strip()
-
-    # Trích xuất câu hỏi cần hỏi AI
     if raw_text.startswith('.'):
         query = raw_text.lstrip('.').strip()
         if query.endswith('.') and not query.endswith('..'):
@@ -1659,36 +1641,26 @@ def handle_ai_chat_message(message):
     else:
         query = raw_text.strip()
 
-    # Bỏ qua nếu người dùng chỉ gõ dấu chấm hoặc câu hỏi rỗng
     if not query or query.replace('.', '').strip() == '':
         return
 
     print(f"🤖 [AI Query] {user_name} ({user_id}): {query[:50]}")
-
-    # Gửi hiệu ứng 'typing' để báo bot đang suy nghĩ
     try:
         bot.send_chat_action(message.chat.id, 'typing')
     except Exception:
         pass
 
-    # Lấy lịch sử bền vững theo từng user và từng chat.
-    history = load_ai_memory(message.chat.id, user_id)
+    history = load_ai_memory()
     if message.reply_to_message and message.reply_to_message.text:
         replied_text = message.reply_to_message.text[:800]
         if not any(h.get("content") == replied_text for h in history):
             history.append({"role": "assistant", "content": replied_text})
 
-    # Gọi AI Groq
     reply_text = call_groq_ai(query, history=history if history else None, user_name=user_name)
-    save_ai_exchange(message.chat.id, user_id, query, reply_text)
+    save_ai_exchange(query, reply_text, chat_id=message.chat.id, user_id=user_id)
 
-    # Chia nhỏ nếu vượt quá giới hạn 4000 ký tự của Telegram
     max_len = 4000
-    if len(reply_text) <= max_len:
-        chunks = [reply_text]
-    else:
-        chunks = [reply_text[i:i + max_len] for i in range(0, len(reply_text), max_len)]
-
+    chunks = [reply_text] if len(reply_text) <= max_len else [reply_text[i:i + max_len] for i in range(0, len(reply_text), max_len)]
     for idx, chunk in enumerate(chunks):
         try:
             if idx == 0:
@@ -1697,6 +1669,7 @@ def handle_ai_chat_message(message):
                 bot.send_message(message.chat.id, chunk)
         except Exception as e:
             print(f"Lỗi gửi tin nhắn AI: {e}")
+
 
 
 @bot.message_handler(commands=['admin', 'panel'])
