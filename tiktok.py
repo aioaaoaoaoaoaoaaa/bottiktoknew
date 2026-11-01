@@ -1387,6 +1387,12 @@ def process_download_request(message, raw_url, platform):
                 chat_id=message.chat.id,
                 message_id=status_msg.message_id
             )
+            delete_error_timer = threading.Timer(
+                2,
+                lambda: bot.delete_message(message.chat.id, status_msg.message_id)
+            )
+            delete_error_timer.daemon = True
+            delete_error_timer.start()
     else:
         record_download_log(
             user=message.from_user,
