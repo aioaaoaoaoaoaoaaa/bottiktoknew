@@ -1128,12 +1128,18 @@ def monitor_consecutive_messages(message, bot):
             print(f"Lỗi hạn chế thành viên 30 giây: {e}")
 
         try:
-            bot.send_message(
+            warning_message = bot.send_message(
                 chat_id,
                 random.choice(spam_warning_messages)
             )
+            delete_timer = threading.Timer(
+                10,
+                lambda: bot.delete_message(chat_id, warning_message.message_id)
+            )
+            delete_timer.daemon = True
+            delete_timer.start()
         except Exception as e:
-            print(f"Lỗi gửi thông báo nhắc nhở: {e}")
+            print(f"Lỗi gửi hoặc tự xóa thông báo nhắc nhở: {e}")
     return telebot.ContinueHandling()
 
 @bot.message_handler(commands=['start', 'help'])
