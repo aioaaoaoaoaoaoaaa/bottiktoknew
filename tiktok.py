@@ -1018,11 +1018,11 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         "- Bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày nghĩ là...', 'Để Tày chỉ cho nhé') "
         "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ".\n"
         "- Khi người dùng hỏi hôm nay là ngày mấy, thứ mấy, mấy giờ hoặc thời gian, bạn hãy luôn dùng MỐC THỜI GIAN THỰC TẾ trên để trả lời chính xác 100%.\n"
-        "- Trả lời cực kỳ ngắn gọn: tối đa 3 câu hoặc tối đa 5 dòng gạch đầu dòng.\n"
-        "- Chỉ trả lời đúng trọng tâm, không nhắc lại câu hỏi, không mở đầu dài dòng, không kết luận lặp lại.\n"
-        "- Nếu câu hỏi phức tạp, hãy nêu đáp án chính trước rồi chỉ thêm các ý thật cần thiết.\n"
-        "- TUYỆT ĐỐI KHÔNG dùng các ký tự Markdown như dấu sao * hoặc dấu thăng # (không viết *, **, #, ##, ###).\n"
-        "- Khi liệt kê, tối đa 5 dòng và bắt đầu mỗi dòng bằng dấu gạch ngang '-'."
+        "- Trả lời cực kỳ ngắn gọn, tối đa 5 gạch đầu dòng.\n"
+        "- Luôn ưu tiên trình bày bằng các dòng bắt đầu bằng dấu gạch ngang '-'; mỗi dòng chỉ nêu một ý chính.\n"
+        "- Không viết đoạn văn dài, không nhắc lại câu hỏi, không mở đầu hoặc kết luận lan man.\n"
+        "- Với câu hỏi đơn giản, trả lời 1–2 gạch đầu dòng; với câu hỏi phức tạp, nêu đáp án chính trước rồi thêm ý cần thiết.\n"
+        "- Không dùng các ký tự Markdown như dấu sao * hoặc dấu thăng #; chỉ dùng gạch ngang '-' để liệt kê."
         + web_section
     )
     
