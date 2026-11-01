@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import uuid
+import sqlite3
 import base64
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -799,6 +800,57 @@ def extract_media_url(text):
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+AI_MEMORY_DB = "ai_memory.sqlite3"
+AI_MEMORY_LIMIT = 20
+
+def init_ai_memory():
+    """Khởi tạo kho lịch sử hội thoại AI bằng SQLite."""
+    with sqlite3.connect(AI_MEMORY_DB) as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS ai_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_memory ON ai_messages(chat_id, user_id, id)")
+
+def load_ai_memory(chat_id, user_id):
+    """Lấy tối đa 20 tin nhắn gần nhất của user trong chat hiện tại."""
+    with sqlite3.connect(AI_MEMORY_DB) as conn:
+        rows = conn.execute(
+            """SELECT role, content FROM ai_messages
+               WHERE chat_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?""",
+            (str(chat_id), str(user_id), AI_MEMORY_LIMIT)
+        ).fetchall()
+    return [{"role": role, "content": content} for role, content in reversed(rows)]
+
+def save_ai_exchange(chat_id, user_id, user_query, assistant_reply):
+    """Lưu lượt hỏi/trả lời và giữ lại 20 tin gần nhất."""
+    with sqlite3.connect(AI_MEMORY_DB) as conn:
+        conn.executemany(
+            "INSERT INTO ai_messages(chat_id, user_id, role, content) VALUES (?, ?, ?, ?)",
+            [(str(chat_id), str(user_id), "user", user_query),
+             (str(chat_id), str(user_id), "assistant", assistant_reply)]
+        )
+        conn.execute(
+            """DELETE FROM ai_messages WHERE chat_id = ? AND user_id = ?
+               AND id NOT IN (SELECT id FROM ai_messages
+                              WHERE chat_id = ? AND user_id = ?
+                              ORDER BY id DESC LIMIT ?)""",
+            (str(chat_id), str(user_id), str(chat_id), str(user_id), AI_MEMORY_LIMIT)
+        )
+
+def clear_ai_memory(chat_id, user_id):
+    """Xóa lịch sử AI của user trong chat hiện tại."""
+    with sqlite3.connect(AI_MEMORY_DB) as conn:
+        conn.execute("DELETE FROM ai_messages WHERE chat_id = ? AND user_id = ?", (str(chat_id), str(user_id)))
+
+init_ai_memory()
+
 def get_gemini_api_keys():
     """Lấy danh sách các API Key Gemini (hỗ trợ nhập nhiều key cách nhau bằng dấu phẩy, chấm phẩy hoặc xuống dòng)"""
     raw_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY") or ""
@@ -1568,6 +1620,14 @@ def is_ai_trigger_message(msg):
         return True
     return False
 
+@bot.message_handler(commands=['clear', 'reset'])
+def handle_ai_memory_clear(message):
+    """Xóa lịch sử hội thoại AI của user trong chat hiện tại."""
+    if not message.from_user:
+        return
+    clear_ai_memory(message.chat.id, message.from_user.id)
+    bot.reply_to(message, "🧹 Tày đã xóa lịch sử trò chuyện của bạn trong chat này.")
+
 @bot.message_handler(func=is_ai_trigger_message)
 def handle_ai_chat_message(message):
     """
@@ -1611,16 +1671,16 @@ def handle_ai_chat_message(message):
     except Exception:
         pass
 
-    # Nếu người dùng đang reply một tin nhắn của bot, lấy ngữ cảnh câu trả lời trước đó
-    history = []
+    # Lấy lịch sử bền vững theo từng user và từng chat.
+    history = load_ai_memory(message.chat.id, user_id)
     if message.reply_to_message and message.reply_to_message.text:
-        history.append({
-            "role": "assistant",
-            "content": message.reply_to_message.text[:800]
-        })
+        replied_text = message.reply_to_message.text[:800]
+        if not any(h.get("content") == replied_text for h in history):
+            history.append({"role": "assistant", "content": replied_text})
 
     # Gọi AI Groq
     reply_text = call_groq_ai(query, history=history if history else None, user_name=user_name)
+    save_ai_exchange(message.chat.id, user_id, query, reply_text)
 
     # Chia nhỏ nếu vượt quá giới hạn 4000 ký tự của Telegram
     max_len = 4000
