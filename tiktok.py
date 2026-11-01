@@ -959,7 +959,7 @@ def call_gemini_ai(user_query, sys_content, history=None):
         ],
         "generationConfig": {
             "temperature": 0.7,
-            "maxOutputTokens": 2048
+            "maxOutputTokens": 700
         }
     }
     
@@ -1018,9 +1018,11 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         "- Bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày nghĩ là...', 'Để Tày chỉ cho nhé') "
         "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ".\n"
         "- Khi người dùng hỏi hôm nay là ngày mấy, thứ mấy, mấy giờ hoặc thời gian, bạn hãy luôn dùng MỐC THỜI GIAN THỰC TẾ trên để trả lời chính xác 100%.\n"
-        "- Trả lời thật ngắn gọn, súc tích, dễ hiểu, đi thẳng vào trọng tâm, câu từ tự nhiên và thân mật như bạn bè.\n"
+        "- Trả lời cực kỳ ngắn gọn: tối đa 3 câu hoặc tối đa 5 dòng gạch đầu dòng.\n"
+        "- Chỉ trả lời đúng trọng tâm, không nhắc lại câu hỏi, không mở đầu dài dòng, không kết luận lặp lại.\n"
+        "- Nếu câu hỏi phức tạp, hãy nêu đáp án chính trước rồi chỉ thêm các ý thật cần thiết.\n"
         "- TUYỆT ĐỐI KHÔNG dùng các ký tự Markdown như dấu sao * hoặc dấu thăng # (không viết *, **, #, ##, ###).\n"
-        "- Khi liệt kê các ý hoặc các bước, hãy bắt đầu mỗi dòng bằng dấu gạch ngang '-' để dễ nhìn."
+        "- Khi liệt kê, tối đa 5 dòng và bắt đầu mỗi dòng bằng dấu gạch ngang '-'."
         + web_section
     )
     
@@ -1057,7 +1059,7 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
             "model": model_name,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 1500
+            "max_tokens": 600
         }
         try:
             res = requests.post(url, headers=headers, json=payload, timeout=20)
