@@ -959,7 +959,7 @@ def call_gemini_ai(user_query, sys_content, history=None):
         ],
         "generationConfig": {
             "temperature": 0.7,
-            "maxOutputTokens": 700
+            "maxOutputTokens": 1200
         }
     }
     
@@ -1018,10 +1018,10 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
         "- Bạn LUÔN XƯNG LÀ 'Tày' (ví dụ: 'Tày chào bạn', 'Theo Tày thì...', 'Tày nghĩ là...', 'Để Tày chỉ cho nhé') "
         "và gọi người dùng là 'bạn'" + (f" hoặc '{user_name}'" if user_name and user_name != "Người dùng" else "") + ".\n"
         "- Khi người dùng hỏi hôm nay là ngày mấy, thứ mấy, mấy giờ hoặc thời gian, bạn hãy luôn dùng MỐC THỜI GIAN THỰC TẾ trên để trả lời chính xác 100%.\n"
-        "- Trả lời cực kỳ ngắn gọn, tối đa 5 gạch đầu dòng.\n"
-        "- Luôn ưu tiên trình bày bằng các dòng bắt đầu bằng dấu gạch ngang '-'; mỗi dòng chỉ nêu một ý chính.\n"
-        "- Không viết đoạn văn dài, không nhắc lại câu hỏi, không mở đầu hoặc kết luận lan man.\n"
-        "- Với câu hỏi đơn giản, trả lời 1–2 gạch đầu dòng; với câu hỏi phức tạp, nêu đáp án chính trước rồi thêm ý cần thiết.\n"
+        "- Trả lời ngắn gọn, dễ hiểu nhưng bắt buộc phải đầy đủ và kết thúc trọn câu; tuyệt đối không cắt giữa chừng.\n"
+        "- Ưu tiên trình bày bằng các dòng bắt đầu bằng dấu gạch ngang '-'; mỗi dòng một ý, khoảng 1–6 dòng tùy độ phức tạp.\n"
+        "- Với câu hỏi định nghĩa, phải nêu rõ khái niệm và trả lời đủ mọi phần người dùng hỏi, có thể thêm ví dụ ngắn nếu cần.\n"
+        "- Không nhắc lại câu hỏi, không mở đầu hoặc kết luận lan man; không rút gọn đến mức mất ý chính.\n"
         "- Không dùng các ký tự Markdown như dấu sao * hoặc dấu thăng #; chỉ dùng gạch ngang '-' để liệt kê."
         + web_section
     )
@@ -1059,7 +1059,7 @@ def call_groq_ai(user_query, history=None, user_name="bạn"):
             "model": model_name,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 600
+            "max_tokens": 1000
         }
         try:
             res = requests.post(url, headers=headers, json=payload, timeout=20)
